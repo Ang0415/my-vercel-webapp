@@ -1,0 +1,54 @@
+# Credentials & Secrets (절대 올리면 안되는 파일 명시)
+stock-auto-writer-44eaa06c140c.json
+# access_token.txt, access_token_irp.txt 등 토큰 파일 제외
+*token*.txt 
+access_*.txt
+.env
+
+
+# Config files (설정 파일 제외, 필요시 주석 해제)
+*.yaml
+
+# Python cache/compiled files
+__pycache__/
+*.pyc
+*.pyo
+
+# IDE folders
+# .vscode/
+.idea/
+
+# OS specific
+.DS_Store
+Thumbs.db
+
+# 결과 데이터 파일 (버전 관리 불필요 시 주석 해제)
+*.csv
+*.json
+
+# Streamlit secrets file (local testing only)
+.streamlit/secrets.toml
+
+# Batch script files (except the final one if needed)
+*_test.bat
+update_and_push.bat
+update_and_push_v2.bat
+# update_debug.bat # 디버깅용 파일도 제외
+
+# Generated performance graphs
+twr_performance_*.png
+
+# Python cache files
+__pycache__/
+*.pyc
+
+# IDE/Editor specific files (optional)
+# .vscode/
+.idea/
+
+# OS specific files (optional)
+.DS_Store
+Thumbs.db
+
+# Exception: Allow GitHub Actions Workflows
+!.github/workflows/*.yaml
