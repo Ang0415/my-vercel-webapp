@@ -547,7 +547,7 @@ def load_current_holdings(_gc, latest_data_date):
     except Exception as e: st.error(f"보유 종목 목록 로딩 중 오류: {e}"); traceback.print_exc(); return pd.DataFrame(columns=['종목코드', '종목명'])
 
 @st.cache_data(ttl=300)
-def calculate_moving_avg_cost(_gc, stock_code):
+def calculate_moving_avg_cost(_gc, stock_code, stock_name=None):
     """'🗓️매매일지' 시트에서 이동평균법으로 평단가 계산"""
     if not isinstance(_gc, gspread.Client): st.error("calculate_moving_avg_cost: 유효한 Google Sheets 클라이언트 객체(gc)가 아닙니다."); return 0.0
     if not stock_code: return 0.0
@@ -576,6 +576,7 @@ def calculate_moving_avg_cost(_gc, stock_code):
                 elif '금현물' in name_in_row or '금99' in name_in_row: match = True
             else:
                  if code_in_row == stock_code_str: match = True
+                 elif stock_name and name_in_row.replace(' ', '') == stock_name.replace(' ', ''): match = True
             
             if match: filtered_trades.append(row)
             
@@ -611,7 +612,7 @@ def calculate_moving_avg_cost(_gc, stock_code):
     return float(final_avg_cost)
 
 @st.cache_data(ttl=3600)
-def get_first_purchase_date(_gc, stock_code):
+def get_first_purchase_date(_gc, stock_code, stock_name=None):
     """'🗓️매매일지' 시트에서 최초 매수일 찾기"""
     if not isinstance(_gc, gspread.Client): return None
     if not stock_code: return None
@@ -639,6 +640,7 @@ def get_first_purchase_date(_gc, stock_code):
                  elif '금현물' in name_in_row or '금99' in name_in_row: match = True
             else:
                  if code_in_row == stock_code_str: match = True
+                 elif stock_name and name_in_row.replace(' ', '') == stock_name.replace(' ', ''): match = True
             
             if match:
                  t_date = row['Date']
@@ -1074,8 +1076,8 @@ if twr_data_df is not None and not twr_data_df.empty:
                 stock_code = stock_options.get(selected_stock_name)
                 if stock_code:
                     # [Reverted] Legacy functions call with gc (API call per stock)
-                    avg_cost = calculate_moving_avg_cost(gc, stock_code)
-                    first_purchase_dt = get_first_purchase_date(gc, stock_code)
+                    avg_cost = calculate_moving_avg_cost(gc, stock_code, selected_stock_name)
+                    first_purchase_dt = get_first_purchase_date(gc, stock_code, selected_stock_name)
 
                     if first_purchase_dt:
                         chart_start_date = first_purchase_dt.date()
