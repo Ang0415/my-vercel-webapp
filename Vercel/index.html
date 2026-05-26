@@ -630,27 +630,52 @@
                 { valId: 'expected-value', subId: 'expected-sub' }
             ];
             metrics.forEach(item => {
-                document.getElementById(item.valId).innerText = '';
-                document.getElementById(item.subId).innerText = '';
-                document.getElementById(item.valId).className = 'card-value skeleton skeleton-value';
-                document.getElementById(item.subId).className = 'card-subtext skeleton skeleton-subtext';
+                try {
+                    const valEl = document.getElementById(item.valId);
+                    const subEl = document.getElementById(item.subId);
+                    if (valEl) {
+                        valEl.innerText = '';
+                        valEl.className = 'card-value skeleton skeleton-value';
+                    }
+                    if (subEl) {
+                        subEl.innerText = '';
+                        subEl.className = 'card-subtext skeleton skeleton-subtext';
+                    }
+                } catch (e) {
+                    console.error('Metrics skeleton error for ' + item.valId + ':', e);
+                }
             });
 
             // 5번째 카드 성적표 스켈레톤 초기화
-            document.getElementById('expected-list').innerHTML = `
-                <div class="skeleton skeleton-subtext" style="height: 12px; margin-bottom: 6px; width: 85%;"></div>
-                <div class="skeleton skeleton-subtext" style="height: 12px; margin-bottom: 6px; width: 90%;"></div>
-                <div class="skeleton skeleton-subtext" style="height: 12px; width: 75%;"></div>
-            `;
+            try {
+                const listEl = document.getElementById('expected-list');
+                if (listEl) {
+                    listEl.innerHTML = `
+                        <div class="skeleton skeleton-subtext" style="height: 12px; margin-bottom: 6px; width: 85%;"></div>
+                        <div class="skeleton skeleton-subtext" style="height: 12px; margin-bottom: 6px; width: 90%;"></div>
+                        <div class="skeleton skeleton-subtext" style="height: 12px; width: 75%;"></div>
+                    `;
+                }
+            } catch (e) {
+                console.error('Expected list skeleton error:', e);
+            }
 
             // 테이블 스켈레톤
-            document.getElementById('alloc-table-body').innerHTML = `
-                <tr>
-                    <td colspan="7"><div class="skeleton skeleton-table" style="height: 150px;"></div></td>
-                </tr>
-            `;
+            try {
+                const allocTableBody = document.getElementById('alloc-table-body');
+                if (allocTableBody) {
+                    allocTableBody.innerHTML = `
+                        <tr>
+                            <td colspan="7"><div class="skeleton skeleton-table" style="height: 150px;"></div></td>
+                        </tr>
+                    `;
+                }
+            } catch (e) {
+                console.error('Alloc table skeleton error:', e);
+            }
 
-            document.getElementById('data-status').innerText = '실시간 데이터 불러오는 중...';
+            const statusEl = document.getElementById('data-status');
+            if (statusEl) statusEl.innerText = '실시간 데이터 불러오는 중...';
         }
 
         // 1. 대시보드 상단 개요 데이터 로드
@@ -659,72 +684,117 @@
                 .then(res => res.json())
                 .then(data => {
                     if (data.total_asset_str === '에러 발생 🚨') {
-                        document.getElementById('data-status').innerText = '구글 시트 연동 에러 🚨';
+                        const statusEl = document.getElementById('data-status');
+                        if (statusEl) statusEl.innerText = '구글 시트 연동 에러 🚨';
                         return;
                     }
                     // 원금
-                    document.getElementById('principal-value').innerText = data.total_principal_str + ' 원';
-                    document.getElementById('principal-value').className = 'card-value';
-                    document.getElementById('principal-sub').innerText = '계좌 전체 투자 원금';
-                    document.getElementById('principal-sub').className = 'card-subtext neutral';
+                    try {
+                        const pVal = document.getElementById('principal-value');
+                        const pSub = document.getElementById('principal-sub');
+                        if (pVal) {
+                            pVal.innerText = data.total_principal_str + ' 원';
+                            pVal.className = 'card-value';
+                        }
+                        if (pSub) {
+                            pSub.innerText = '계좌 전체 투자 원금';
+                            pSub.className = 'card-subtext neutral';
+                        }
+                    } catch (e) { console.error('Principal binding error:', e); }
 
                     // 총 평가액
-                    document.getElementById('asset-value').innerText = data.total_asset_str + ' 원';
-                    document.getElementById('asset-value').className = 'card-value';
-                    document.getElementById('asset-sub').innerText = '실시간 평가 잔고 합계';
-                    document.getElementById('asset-sub').className = 'card-subtext neutral';
+                    try {
+                        const aVal = document.getElementById('asset-value');
+                        const aSub = document.getElementById('asset-sub');
+                        if (aVal) {
+                            aVal.innerText = data.total_asset_str + ' 원';
+                            aVal.className = 'card-value';
+                        }
+                        if (aSub) {
+                            aSub.innerText = '실시간 평가 잔고 합계';
+                            aSub.className = 'card-subtext neutral';
+                        }
+                    } catch (e) { console.error('Asset binding error:', e); }
 
                     // 전체 TWR
-                    document.getElementById('twr-value').innerText = data.twr_str;
-                    document.getElementById('twr-value').className = 'card-value ' + (data.twr > 0 ? 'up' : (data.twr < 0 ? 'down' : 'neutral'));
-                    document.getElementById('twr-sub').innerText = '시간가중수익률(TWR)';
-                    document.getElementById('twr-sub').className = 'card-subtext ' + (data.twr > 0 ? 'up' : (data.twr < 0 ? 'down' : 'neutral'));
+                    try {
+                        const tVal = document.getElementById('twr-value');
+                        const tSub = document.getElementById('twr-sub');
+                        if (tVal) {
+                            tVal.innerText = data.twr_str;
+                            tVal.className = 'card-value ' + (data.twr > 0 ? 'up' : (data.twr < 0 ? 'down' : 'neutral'));
+                        }
+                        if (tSub) {
+                            tSub.innerText = '시간가중수익률(TWR)';
+                            tSub.className = 'card-subtext ' + (data.twr > 0 ? 'up' : (data.twr < 0 ? 'down' : 'neutral'));
+                        }
+                    } catch (e) { console.error('TWR binding error:', e); }
 
                     // 단순 손익
-                    document.getElementById('gainloss-value').innerText = data.gain_loss_amount_str + ' 원';
-                    document.getElementById('gainloss-value').className = 'card-value ' + (data.gain_loss_amount > 0 ? 'up' : (data.gain_loss_amount < 0 ? 'down' : 'neutral'));
-                    document.getElementById('gainloss-sub').innerText = '누적 수익률: ' + data.gain_loss_rate_str;
-                    document.getElementById('gainloss-sub').className = 'card-subtext ' + (data.gain_loss_amount > 0 ? 'up' : (data.gain_loss_amount < 0 ? 'down' : 'neutral'));
+                    try {
+                        const gVal = document.getElementById('gainloss-value');
+                        const gSub = document.getElementById('gainloss-sub');
+                        if (gVal) {
+                            gVal.innerText = data.gain_loss_amount_str + ' 원';
+                            gVal.className = 'card-value ' + (data.gain_loss_amount > 0 ? 'up' : (data.gain_loss_amount < 0 ? 'down' : 'neutral'));
+                        }
+                        if (gSub) {
+                            gSub.innerText = '누적 수익률: ' + data.gain_loss_rate_str;
+                            gSub.className = 'card-subtext ' + (data.gain_loss_amount > 0 ? 'up' : (data.gain_loss_amount < 0 ? 'down' : 'neutral'));
+                        }
+                    } catch (e) { console.error('Gainloss binding error:', e); }
 
                     // 기대수익률 및 연도별 수익률 카드 바인딩
-                    if (data.expected_annual_return !== undefined) {
-                        document.getElementById('expected-value').innerText = '연 ' + data.expected_annual_return.toFixed(2) + '%';
-                        document.getElementById('expected-value').className = 'card-value expected-val-color';
-                        document.getElementById('expected-sub').innerText = '포트폴리오 연평균 기대치';
-                        document.getElementById('expected-sub').className = 'card-subtext neutral';
-                    }
-
-                    if (data.annual_returns) {
-                        const listContainer = document.getElementById('expected-list');
-                        listContainer.innerHTML = '';
-                        listContainer.className = 'expected-list-container';
-                        
-                        const years = ["2024", "2025", "2026_YTD"];
-                        years.forEach(year => {
-                            let val = data.annual_returns[year];
-                            if (val !== undefined) {
-                                const item = document.createElement('div');
-                                item.className = 'expected-list-item';
-                                item.style.display = 'flex';
-                                item.style.justify = 'space-between';
-                                item.style.fontSize = '0.8rem';
-                                item.style.marginBottom = '3px';
-                                
-                                const labelSpan = document.createElement('span');
-                                labelSpan.style.color = 'var(--text-secondary)';
-                                labelSpan.innerText = year === "2026_YTD" ? "• 2026년 (YTD)" : `• ${year}년`;
-                                
-                                const valSpan = document.createElement('span');
-                                const sign = val > 0 ? '+' : '';
-                                valSpan.innerText = `${sign}${val.toFixed(2)}%`;
-                                valSpan.className = val > 0 ? 'up font-semibold' : (val < 0 ? 'down font-semibold' : 'neutral font-semibold');
-                                
-                                item.appendChild(labelSpan);
-                                item.appendChild(valSpan);
-                                listContainer.appendChild(item);
+                    try {
+                        if (data.expected_annual_return !== undefined) {
+                            const eVal = document.getElementById('expected-value');
+                            const eSub = document.getElementById('expected-sub');
+                            if (eVal) {
+                                eVal.innerText = '연 ' + data.expected_annual_return.toFixed(2) + '%';
+                                eVal.className = 'card-value expected-val-color';
                             }
-                        });
-                    }
+                            if (eSub) {
+                                eSub.innerText = '포트폴리오 연평균 기대치';
+                                eSub.className = 'card-subtext neutral';
+                            }
+                        }
+                    } catch (e) { console.error('Expected yield binding error:', e); }
+
+                    try {
+                        if (data.annual_returns) {
+                            const listContainer = document.getElementById('expected-list');
+                            if (listContainer) {
+                                listContainer.innerHTML = '';
+                                listContainer.className = 'expected-list-container';
+                                
+                                const years = ["2024", "2025", "2026_YTD"];
+                                years.forEach(year => {
+                                    let val = data.annual_returns[year];
+                                    if (val !== undefined) {
+                                        const item = document.createElement('div');
+                                        item.className = 'expected-list-item';
+                                        item.style.display = 'flex';
+                                        item.style.justify = 'space-between';
+                                        item.style.fontSize = '0.8rem';
+                                        item.style.marginBottom = '3px';
+                                        
+                                        const labelSpan = document.createElement('span');
+                                        labelSpan.style.color = 'var(--text-secondary)';
+                                        labelSpan.innerText = year === "2026_YTD" ? "• 2026년 (YTD)" : `• ${year}년`;
+                                        
+                                        const valSpan = document.createElement('span');
+                                        const sign = val > 0 ? '+' : '';
+                                        valSpan.innerText = `${sign}${val.toFixed(2)}%`;
+                                        valSpan.className = val > 0 ? 'up font-semibold' : (val < 0 ? 'down font-semibold' : 'neutral font-semibold');
+                                        
+                                        item.appendChild(labelSpan);
+                                        item.appendChild(valSpan);
+                                        listContainer.appendChild(item);
+                                    }
+                                });
+                            }
+                        }
+                    } catch (e) { console.error('Yearly returns list binding error:', e); }
                 });
         }
 
