@@ -616,8 +616,8 @@ td.progress-align {
 
 .charts-column .chart-container {
     width: 100%;
-    height: 280px !important;
-    min-height: 280px !important;
+    height: 390px !important;
+    min-height: 390px !important;
 }
 
 /* ==========================================================================
@@ -890,6 +890,38 @@ td.progress-align {
     color: var(--accent-blue);
     font-weight: 800;
     margin: 0 4px;
+}
+
+/* ==========================================================================
+   5-Card Metrics Grid Responsive Design & Expected Return Special styling
+   ========================================================================== */
+#metrics-grid {
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+@media (min-width: 1400px) {
+    #metrics-grid {
+        grid-template-columns: repeat(5, 1fr);
+    }
+}
+
+.expected-val-color {
+    color: #f2ca65 !important;
+}
+
+.expected-list-container {
+    margin-top: 10px;
+    border-top: 1px solid rgba(240, 246, 252, 0.15);
+    padding-top: 8px;
+    width: 100%;
+}
+
+.expected-list-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.8rem;
+    margin-bottom: 3px;
 }
 
 

@@ -30,7 +30,7 @@
 
         <!-- 1. 주식 포트폴리오 탭 콘텐츠 -->
         <div id="tab-stock" class="tab-content active">
-            <!-- 4개 핵심 지표 카드 영역 -->
+            <!-- 5개 핵심 지표 카드 영역 -->
             <div class="grid" id="metrics-grid">
                 <!-- 1. 원금 카드 -->
                 <div class="card" id="card-principal">
@@ -58,6 +58,20 @@
                     <div class="card-title">💸 전체 단순 손익</div>
                     <div class="card-value skeleton skeleton-value" id="gainloss-value"></div>
                     <div class="card-subtext skeleton skeleton-subtext" id="gainloss-sub"></div>
+                </div>
+
+                <!-- 5. 성과 및 기대 수익률 카드 -->
+                <div class="card" id="card-expected" style="display: flex; flex-direction: column; justify-content: space-between;">
+                    <div>
+                        <div class="card-title">🎯 성과 및 기대 수익률</div>
+                        <div class="card-value skeleton skeleton-value" id="expected-value"></div>
+                        <div class="card-subtext skeleton skeleton-subtext" id="expected-sub"></div>
+                    </div>
+                    <div class="expected-list-container" id="expected-list" style="margin-top: 10px; border-top: 1px solid rgba(240, 246, 252, 0.15); padding-top: 8px;">
+                        <div class="skeleton skeleton-subtext" style="height: 12px; margin-bottom: 6px; width: 85%;"></div>
+                        <div class="skeleton skeleton-subtext" style="height: 12px; margin-bottom: 6px; width: 90%;"></div>
+                        <div class="skeleton skeleton-subtext" style="height: 12px; width: 75%;"></div>
+                    </div>
                 </div>
             </div>
 
@@ -612,7 +626,8 @@
                 { valId: 'principal-value', subId: 'principal-sub' },
                 { valId: 'asset-value', subId: 'asset-sub' },
                 { valId: 'twr-value', subId: 'twr-sub' },
-                { valId: 'gainloss-value', subId: 'gainloss-sub' }
+                { valId: 'gainloss-value', subId: 'gainloss-sub' },
+                { valId: 'expected-value', subId: 'expected-sub' }
             ];
             metrics.forEach(item => {
                 document.getElementById(item.valId).innerText = '';
@@ -620,6 +635,13 @@
                 document.getElementById(item.valId).className = 'card-value skeleton skeleton-value';
                 document.getElementById(item.subId).className = 'card-subtext skeleton skeleton-subtext';
             });
+
+            // 5번째 카드 성적표 스켈레톤 초기화
+            document.getElementById('expected-list').innerHTML = `
+                <div class="skeleton skeleton-subtext" style="height: 12px; margin-bottom: 6px; width: 85%;"></div>
+                <div class="skeleton skeleton-subtext" style="height: 12px; margin-bottom: 6px; width: 90%;"></div>
+                <div class="skeleton skeleton-subtext" style="height: 12px; width: 75%;"></div>
+            `;
 
             // 테이블 스켈레톤
             document.getElementById('alloc-table-body').innerHTML = `
@@ -663,6 +685,46 @@
                     document.getElementById('gainloss-value').className = 'card-value ' + (data.gain_loss_amount > 0 ? 'up' : (data.gain_loss_amount < 0 ? 'down' : 'neutral'));
                     document.getElementById('gainloss-sub').innerText = '누적 수익률: ' + data.gain_loss_rate_str;
                     document.getElementById('gainloss-sub').className = 'card-subtext ' + (data.gain_loss_amount > 0 ? 'up' : (data.gain_loss_amount < 0 ? 'down' : 'neutral'));
+
+                    // 기대수익률 및 연도별 수익률 카드 바인딩
+                    if (data.expected_annual_return !== undefined) {
+                        document.getElementById('expected-value').innerText = '연 ' + data.expected_annual_return.toFixed(2) + '%';
+                        document.getElementById('expected-value').className = 'card-value expected-val-color';
+                        document.getElementById('expected-sub').innerText = '포트폴리오 연평균 기대치';
+                        document.getElementById('expected-sub').className = 'card-subtext neutral';
+                    }
+
+                    if (data.annual_returns) {
+                        const listContainer = document.getElementById('expected-list');
+                        listContainer.innerHTML = '';
+                        listContainer.className = 'expected-list-container';
+                        
+                        const years = ["2024", "2025", "2026_YTD"];
+                        years.forEach(year => {
+                            let val = data.annual_returns[year];
+                            if (val !== undefined) {
+                                const item = document.createElement('div');
+                                item.className = 'expected-list-item';
+                                item.style.display = 'flex';
+                                item.style.justify = 'space-between';
+                                item.style.fontSize = '0.8rem';
+                                item.style.marginBottom = '3px';
+                                
+                                const labelSpan = document.createElement('span');
+                                labelSpan.style.color = 'var(--text-secondary)';
+                                labelSpan.innerText = year === "2026_YTD" ? "• 2026년 (YTD)" : `• ${year}년`;
+                                
+                                const valSpan = document.createElement('span');
+                                const sign = val > 0 ? '+' : '';
+                                valSpan.innerText = `${sign}${val.toFixed(2)}%`;
+                                valSpan.className = val > 0 ? 'up font-semibold' : (val < 0 ? 'down font-semibold' : 'neutral font-semibold');
+                                
+                                item.appendChild(labelSpan);
+                                item.appendChild(valSpan);
+                                listContainer.appendChild(item);
+                            }
+                        });
+                    }
                 });
         }
 
