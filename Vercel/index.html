@@ -334,21 +334,26 @@
         // 차트 인스턴스 전역 저장소
         let charts = {};
 
-        // 원화 단위 축소 포맷팅 함수 (X억 Y천)
+        // 원화 단위 축소 포맷팅 함수 (1.1억, 95백만, 92만 등)
         function formatKrwShort(val) {
             if (val < 0) return "-";
-            const eok = Math.floor(val / 100000000);
-            const remain = val % 100000000;
-            const cheon = Math.floor(remain / 10000000);
-            
-            if (eok > 0) {
-                if (cheon > 0) return `${eok}억${cheon}천`;
-                else return `${eok}억`;
+            if (val >= 100000000) {
+                const eokVal = val / 100000000;
+                const eokStr = eokVal.toFixed(1).replace(/\.0$/, '');
+                return `${eokStr}억`;
+            } else if (val >= 1000000) {
+                const manVal = val / 1000000;
+                const manStr = manVal.toFixed(1).replace(/\.0$/, '');
+                return `${manStr}백만`;
+            } else if (val >= 10000) {
+                const tenManVal = val / 10000;
+                const tenManStr = tenManVal.toFixed(0);
+                return `${tenManStr}만`;
             } else {
-                if (cheon > 0) return `${cheon}천`;
-                else return `${val.toLocaleString()}원`;
+                return `${val.toLocaleString()}원`;
             }
         }
+
 
         // --- 상단 수치 합계 라벨 그리기 플러그인 (Chart.js용) ---
         const topTextPlugin = {
