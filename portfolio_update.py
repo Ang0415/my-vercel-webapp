@@ -407,10 +407,12 @@ def calculate_and_update_account_values(gc):
                     utils.safe_execute_with_retry(ws.update_cell, r_idx, 5, total_val)
                     print(f"✅ [{acc_key}] {target_date_str} 업데이트: {total_val:,.0f}")
                 else:
-                    new_row = [target_date_str, "", "", "", total_val]
-                    utils.safe_execute_with_retry(ws.append_row, new_row, value_input_option='USER_ENTERED')
+                    # Find the first empty row in Column A to write the date and value
+                    r_idx = len(dates) + 1
+                    utils.safe_execute_with_retry(ws.update_cell, r_idx, 1, target_date_str)
+                    utils.safe_execute_with_retry(ws.update_cell, r_idx, 5, total_val)
                     dates.append(target_date_str)
-                    print(f"✅ [{acc_key}] {target_date_str} 추가: {total_val:,.0f}")
+                    print(f"✅ [{acc_key}] {target_date_str} 추가 (Row {r_idx}): {total_val:,.0f}")
             except Exception as e:
                 print(f"❌ {acc_key} 업데이트 실패: {e}") 
 

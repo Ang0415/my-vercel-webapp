@@ -1,5 +1,6 @@
 # Credentials & Secrets (절대 올리면 안되는 파일 명시)
 stock-auto-writer-44eaa06c140c.json
+*.key
 # access_token.txt, access_token_irp.txt 등 토큰 파일 제외
 *token*.txt 
 access_*.txt
@@ -50,5 +51,10 @@ __pycache__/
 .DS_Store
 Thumbs.db
 
+# Corrupted Git Backup and Scratch folders
+.git_corrupted/
+scratch/
+
 # Exception: Allow GitHub Actions Workflows
 !.github/workflows/*.yaml
+!*.yml
