@@ -207,8 +207,8 @@ class handler(BaseHTTPRequestHandler):
             top_8_subcats = top_subcats[:8]
             
             # 12. 저축·투자 & 대출 의사결정 도우미
-            # 대출 시작 총원금: 2026.01.01 기준 baseline 시작 원금
-            loan_start_principal = 488889504
+            # 대출 시작 총원금: 최초 대출 시점의 기준 총원금
+            loan_start_principal = 504000000
             
             # 구글시트 '예산 및 설정' J~L열에서 실시간 대출 잔액 및 금리 정보 추출
             total_current_loan_balance = 0
