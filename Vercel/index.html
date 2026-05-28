@@ -231,12 +231,41 @@
                             <div class="helper-stat-value" id="loan-repayment-rate">-</div>
                         </div>
                         <div class="helper-stat-item">
-                            <div class="helper-stat-label">가중평균 대출금리</div>
+                            <div class="helper-stat-label">실질 대출금리</div>
                             <div class="helper-stat-value" id="loan-avg-interest-rate">-</div>
+                            <div style="font-size: 0.72rem; color: var(--text-secondary); margin-top: 4px;" id="loan-avg-interest-sub">(표면 연 -)</div>
                         </div>
                         <div class="helper-stat-item">
                             <div class="helper-stat-label">투자 - 대출 스프레드</div>
                             <div class="helper-stat-value" id="loan-spread" style="color: var(--accent-green); font-weight: 700;">-</div>
+                        </div>
+                    </div>
+                    
+                    <!-- 🔍 개별 대출 아코디언 토글 추가 -->
+                    <div class="loan-accordion-wrapper" style="margin-top: 24px; border-top: 1px solid rgba(240, 246, 252, 0.1); padding-top: 16px;">
+                        <button class="accordion-toggle-btn" onclick="toggleLoanDetails()">
+                            <span>🔍</span> 개별 대출 상세 현황 및 맞춤 상환 전략 보기 <span id="accordion-arrow">▼</span>
+                        </button>
+                        <div class="accordion-content" id="loan-details-content">
+                            <div class="table-wrapper" style="margin-top: 10px;">
+                                <table id="loan-details-table">
+                                    <thead>
+                                        <tr>
+                                            <th>대출 항목명</th>
+                                            <th>현재 대출 잔액</th>
+                                            <th>표면 금리</th>
+                                            <th>회사 지원</th>
+                                            <th>실질 금리</th>
+                                            <th>상환 방식</th>
+                                            <th>투자 대비 스프레드</th>
+                                            <th>추천 행동 전략</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="loan-details-tbody">
+                                        <!-- Dynamic JS Binding -->
+                                    </tbody>
+                                </table>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -686,6 +715,20 @@
             if (statusEl) statusEl.innerText = '실시간 데이터 불러오는 중...';
         }
 
+        // 개별 대출 아코디언 접고 펴는 함수 (부드러운 애니메이션 효과 포함)
+        function toggleLoanDetails() {
+            const content = document.getElementById('loan-details-content');
+            const arrow = document.getElementById('accordion-arrow');
+            
+            if (content.style.maxHeight && content.style.maxHeight !== '0px') {
+                content.style.maxHeight = '0px';
+                arrow.innerText = '▼';
+            } else {
+                content.style.maxHeight = content.scrollHeight + 'px';
+                arrow.innerText = '▲';
+            }
+        }
+
         // 대출 의사결정 도우미 화면 업데이트 함수 (실시간 포트폴리오 수익률 및 실시간 대출금리/잔액 연동)
         function updateLoanHelperUI() {
             if (!window.loanHelper) return;
@@ -695,28 +738,68 @@
             const repayment = window.loanHelper.repayment;
             const repaymentRate = window.loanHelper.repayment_rate;
             const loanInterestRate = window.loanHelper.loan_interest_rate || 3.8;
+            const effectiveInterestRate = window.loanHelper.effective_loan_interest_rate || loanInterestRate;
             
             const pStartEl = document.getElementById('loan-start-principal');
             const pCurrentEl = document.getElementById('loan-current-principal');
             const pAccumEl = document.getElementById('loan-accum-repayment');
             const rateEl = document.getElementById('loan-repayment-rate');
             const interestEl = document.getElementById('loan-avg-interest-rate');
+            const interestSubEl = document.getElementById('loan-avg-interest-sub');
             const spreadEl = document.getElementById('loan-spread');
             
             if (pStartEl) pStartEl.innerText = startPrincipal.toLocaleString() + ' 원';
             if (pCurrentEl) pCurrentEl.innerText = currentPrincipal.toLocaleString() + ' 원';
             if (pAccumEl) pAccumEl.innerText = repayment.toLocaleString() + ' 원';
             if (rateEl) rateEl.innerText = repaymentRate.toFixed(1) + ' %';
-            if (interestEl) interestEl.innerText = '연 ' + loanInterestRate.toFixed(2) + '%';
+            if (interestEl) interestEl.innerText = '연 ' + effectiveInterestRate.toFixed(2) + '%';
+            if (interestSubEl) interestSubEl.innerText = `(표면 연 ${loanInterestRate.toFixed(2)}%)`;
             
-            // Calculate spread dynamically using portfolio expected return, fallback to 5.0%
+            // Calculate spread dynamically using portfolio expected return and effective interest rate
             const portfolioReturn = window.expectedAnnualReturn !== undefined ? window.expectedAnnualReturn : 5.0;
-            const spread = portfolioReturn - loanInterestRate;
+            const spread = portfolioReturn - effectiveInterestRate;
             
             if (spreadEl) {
                 const spreadStr = (spread >= 0 ? '+' : '') + spread.toFixed(2) + '%';
                 spreadEl.innerText = spreadStr;
                 spreadEl.className = 'helper-stat-value ' + (spread > 0 ? 'up' : (spread < 0 ? 'down' : 'neutral'));
+            }
+
+            // 개별 대출 상세 테이블 동적 바인딩
+            const tbody = document.getElementById('loan-details-tbody');
+            if (tbody && window.loanHelper.individual_loans) {
+                tbody.innerHTML = '';
+                
+                window.loanHelper.individual_loans.forEach(loan => {
+                    const tr = document.createElement('tr');
+                    
+                    // 투자 대비 개별 스프레드 계산
+                    const individualSpread = portfolioReturn - loan.effective_rate;
+                    const spreadStr = (individualSpread >= 0 ? '+' : '') + individualSpread.toFixed(2) + '%';
+                    const spreadClass = individualSpread > 0 ? 'up font-semibold' : (individualSpread < 0 ? 'down font-semibold' : 'neutral font-semibold');
+                    
+                    // 추천 행동 전략 뱃지 및 문구 설정 (회사 대출의 경우 3% 지원 혜택 언급하며 유지 권장)
+                    let strategyHtml = '';
+                    if (loan.name.includes('회사대출')) {
+                        strategyHtml = `<span class="badge" style="background: rgba(56, 139, 253, 0.15); color: var(--accent-blue); border: 1px solid rgba(56, 139, 253, 0.3);">💰 대출 유지 & 적극 투자!</span>`;
+                    } else if (individualSpread > 1.5) {
+                        strategyHtml = `<span class="badge badge-up">📈 투자 유리 (유지)</span>`;
+                    } else {
+                        strategyHtml = `<span class="badge badge-down">🚨 중도 상환 검토</span>`;
+                    }
+                    
+                    tr.innerHTML = `
+                        <td class="bold-cat">${loan.name}</td>
+                        <td class="num-align">${loan.balance.toLocaleString()}원</td>
+                        <td class="num-align">연 ${loan.nominal_rate.toFixed(2)}%</td>
+                        <td class="num-align" style="color: var(--accent-green); font-weight: 550;">${loan.subsidy_rate > 0 ? '연 ' + loan.subsidy_rate.toFixed(2) + '%' : '-'}</td>
+                        <td class="num-align" style="font-weight: 600;">연 ${loan.effective_rate.toFixed(2)}%</td>
+                        <td>${loan.method}</td>
+                        <td class="${spreadClass}">${spreadStr}</td>
+                        <td>${strategyHtml}</td>
+                    `;
+                    tbody.appendChild(tr);
+                });
             }
         }
 

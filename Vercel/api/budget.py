@@ -210,15 +210,20 @@ class handler(BaseHTTPRequestHandler):
             # 대출 시작 총원금: 최초 대출 시점의 기준 총원금
             loan_start_principal = 504000000
             
-            # 구글시트 '예산 및 설정' J~L열에서 실시간 대출 잔액 및 금리 정보 추출
+            # 구글시트 '예산 및 설정' J~N열에서 실시간 개별 대출 정보 추출
             total_current_loan_balance = 0
-            weighted_loan_interest_rate_sum = 0.0
+            weighted_loan_interest_rate_sum = 0.0      # 표면 금리 가중합
+            weighted_effective_interest_rate_sum = 0.0 # 실질 금리 가중합
+            
+            individual_loans = []
             
             for row in settings_rows[1:]:
-                if len(row) > 11:
+                if len(row) > 13:
                     loan_name = row[9].strip()
                     loan_bal_str = row[10].strip()
                     loan_rate_str = row[11].strip()
+                    repay_method = row[12].strip()
+                    maturity_period = row[13].strip()
                     
                     # '항목' 헤더 및 합계 행 등을 제외하고 유효한 대출 항목만 선별
                     if loan_name and loan_name != '항목' and loan_bal_str:
@@ -228,14 +233,34 @@ class handler(BaseHTTPRequestHandler):
                             
                             # 금리 문자열에서 숫자 부분 추출 (예: '4.25%(고정)' -> 4.25)
                             rate_match = re.search(r'([\d.]+)', loan_rate_str)
-                            loan_rate = float(rate_match.group(1)) if rate_match else 0.0
-                            weighted_loan_interest_rate_sum += curr_bal * loan_rate
+                            nominal_rate = float(rate_match.group(1)) if rate_match else 0.0
+                            
+                            # 회사 지원 금리 결정 (회사대출인 경우 3.0%, 그 외는 0.0%)
+                            subsidy_rate = 3.0 if '회사대출' in loan_name else 0.0
+                            effective_rate = nominal_rate - subsidy_rate
+                            if effective_rate < 0:
+                                effective_rate = 0.0
+                                
+                            weighted_loan_interest_rate_sum += curr_bal * nominal_rate
+                            weighted_effective_interest_rate_sum += curr_bal * effective_rate
+                            
+                            individual_loans.append({
+                                "name": loan_name,
+                                "balance": curr_bal,
+                                "nominal_rate": nominal_rate,
+                                "subsidy_rate": subsidy_rate,
+                                "effective_rate": round(effective_rate, 3),
+                                "method": repay_method,
+                                "maturity": maturity_period
+                            })
             
-            # 가중평균 대출금리 산정 (대출이 없는 경우 기본값 3.8% 적용)
+            # 가중평균 대출금리 산정
             if total_current_loan_balance > 0:
                 loan_interest_rate = weighted_loan_interest_rate_sum / total_current_loan_balance
+                effective_loan_interest_rate = weighted_effective_interest_rate_sum / total_current_loan_balance
             else:
                 loan_interest_rate = 3.8
+                effective_loan_interest_rate = 3.8
                 
             # 누적 상환원금 = 대출 시작 총원금 - 현재 대출 잔액
             # 만약 현재 잔액이 시작 원금보다 큰 경우(추가 대출 발생 등), 0원 이하로 떨어지지 않도록 방어 코드 적용
@@ -258,8 +283,9 @@ class handler(BaseHTTPRequestHandler):
             loan_repayment_rate = (total_repayment / loan_start_principal * 100) if loan_start_principal > 0 else 0.0
             
             loan_interest_rate = round(loan_interest_rate, 2)
+            effective_loan_interest_rate = round(effective_loan_interest_rate, 2)
             investment_return_rate = 5.0  # 기대 투자수익률 5.0% (프론트엔드 연동 전 fallback)
-            spread = investment_return_rate - loan_interest_rate
+            spread = investment_return_rate - effective_loan_interest_rate
 
             
             # 13. [순수 여유 현금 잔액 연산 - 주식 대시보드 실시간 연동용]
@@ -446,7 +472,7 @@ class handler(BaseHTTPRequestHandler):
                 warning_status = f"🛍️ [쇼핑 칭찬] '생활_쇼핑' 지출이 {shopping_actual:,}원으로 목표 예산({shopping_budget:,}원) 이하로 아주 알뜰하게 지켜졌습니다."
                 
             # E. 자산 운용 솔루션
-            solution_status = f"⚖️ [자산 운용 솔루션]: 대출 이자가 연 {loan_interest_rate}% 선일 때, 주식/펀드의 기대 세후 수익률이 {investment_return_rate}% 이상 나오지 않는 보수적인 장세라면 대출 원금 소액 중도상환이 세금과 리스크를 배제한 '확정 연 {loan_interest_rate}%의 수익률'을 보장받는 안전판 역할을 해줍니다. 여유금의 40%는 투자에 분배하고 60%는 대출 원금 상환에 분배하는 '포트폴리오 하이브리드 분배 법칙'을 추천해 드립니다."
+            solution_status = f"⚖️ [자산 운용 솔루션]: 현재 대출의 가중평균 표면금리는 연 {loan_interest_rate}%이지만, 회사 대출의 이자 3% 지원 혜택 덕분에 회원님의 '실질 대출금리는 연 {effective_loan_interest_rate}%'에 불과합니다. 현재 주식 포트폴리오의 기대수익률이 연 5.50% 선이므로, 실질 스프레드 차이가 무려 연 +1.85% 이상 벌어지고 있습니다. 따라서 회원님의 대출(특히 실질 금리가 1.1%~1.7% 수준인 회사대출)은 절대 중도 상환하지 않고 최대한 유지하시면서, 여유 자금을 주식 및 ISA 포트폴리오에 적극적으로 분산 투자하여 레버리지 극대화 혜택을 누리시는 것이 재무적 기회비용 측면에서 압도적으로 유리합니다. 회원님의 대출 유지 전략은 100% 옳습니다!"
             
             diagnostic_report = f"💡 Antigravity 가계 종합 진단 & 재무 솔루션 ({selected_month} 기준)\n" + "-"*90 + f"\n{health_status}\n{fixed_status}\n{praise_status}\n{warning_status}\n{solution_status}"
             
@@ -466,7 +492,9 @@ class handler(BaseHTTPRequestHandler):
                     "repayment": total_repayment,
                     "repayment_rate": round(loan_repayment_rate, 1),
                     "loan_interest_rate": round(loan_interest_rate, 2),
-                    "spread_str": f"+{spread:.1f}%" if spread >= 0 else f"{spread:.1f}%"
+                    "effective_loan_interest_rate": round(effective_loan_interest_rate, 2),
+                    "spread_str": f"+{spread:.1f}%" if spread >= 0 else f"{spread:.1f}%",
+                    "individual_loans": individual_loans
                 },
                 "category_comparison": category_comparison,
                 "card_comparison": card_comparison,

@@ -924,6 +924,48 @@ td.progress-align {
     margin-bottom: 3px;
 }
 
+/* ==========================================================================
+   🔍 Loan Accordion Toggle Styles
+   ========================================================================== */
+.accordion-toggle-btn {
+    width: 100%;
+    background: rgba(30, 36, 45, 0.5) !important;
+    border: 1px solid var(--card-border) !important;
+    color: var(--text-primary) !important;
+    padding: 12px !important;
+    border-radius: 8px !important;
+    font-weight: 600 !important;
+    cursor: pointer !important;
+    transition: var(--transition) !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 8px !important;
+    font-size: 0.9rem !important;
+}
+
+.accordion-toggle-btn:hover {
+    background: rgba(88, 166, 255, 0.1) !important;
+    border-color: var(--accent-blue) !important;
+    box-shadow: 0 0 10px rgba(88, 166, 255, 0.15) !important;
+}
+
+.accordion-content {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.4s ease-out;
+    margin-top: 12px;
+}
+
+#loan-details-table {
+    font-size: 0.85rem !important;
+}
+
+#loan-details-table th, #loan-details-table td {
+    padding: 10px 12px !important;
+}
+
+
 
 
 
