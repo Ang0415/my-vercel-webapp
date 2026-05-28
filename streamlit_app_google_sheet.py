@@ -282,6 +282,24 @@ def load_gain_loss_data(_gc):
         st.error(f"단순 손익 데이터 로딩 중 오류 발생: {e}")
         return {}
 
+@st.cache_data(ttl=60)
+def load_historical_total_profit(_gc):
+    """성과_손익_Raw 파일의 Total 시트에서 역사적 단순손익 데이터를 전체 로드합니다."""
+    try:
+        spreadsheet = safe_api_call(_gc.open, GAIN_LOSS_RAW_SHEET)
+        ws = safe_api_call(spreadsheet.worksheet, 'Total')
+        data = safe_api_call(ws.get_all_records)
+        df = pd.DataFrame(data)
+        if not df.empty:
+            df.columns = df.columns.str.strip()
+            df['날짜'] = pd.to_datetime(df['날짜'], errors='coerce')
+            df = df.dropna(subset=['날짜'])
+            df = df.rename(columns={'날짜': 'Date', '단순손익': 'Profit'})
+            return df[['Date', 'Profit']]
+    except Exception as e:
+        print("Error in load_historical_total_profit:", e)
+    return pd.DataFrame()
+
 # load_latest_balances, load_historical_balances 삭제됨 (성과_자산추이_Raw 사용으로 대체)
 
 
@@ -958,6 +976,60 @@ if twr_data_df is not None and not twr_data_df.empty:
         fig_accounts_twr.update_layout(xaxis_title='날짜', yaxis_title='수익률 (%)', hovermode="x unified")
         st.plotly_chart(fig_accounts_twr, use_container_width=True)
     else: st.info("개별 계좌 TWR 데이터가 없습니다.")
+
+    # 3. 전체 포트폴리오 TWR vs MWR (행동 격차) 그래프 추가
+    st.markdown("#### ⚖️ 전체 포트폴리오 TWR vs MWR 비교 (행동 격차)")
+    
+    total_profit_df = load_historical_total_profit(gc)
+    
+    if (not total_twr_df.empty) and (daily_values_df is not None) and (not total_profit_df.empty):
+        try:
+            total_val_df = daily_values_df[daily_values_df['Account'] == 'Total'].copy()
+            total_val_df = total_val_df.rename(columns={'Value': 'Valuation'})
+            
+            m1 = pd.merge(total_twr_df[['Date', 'TWR']], total_val_df[['Date', 'Valuation']], on='Date', how='inner')
+            m2 = pd.merge(m1, total_profit_df[['Date', 'Profit']], on='Date', how='inner')
+            
+            if not m2.empty:
+                m2['Valuation'] = pd.to_numeric(m2['Valuation'], errors='coerce')
+                m2['Profit'] = pd.to_numeric(m2['Profit'], errors='coerce')
+                m2['TWR'] = pd.to_numeric(m2['TWR'], errors='coerce')
+                
+                # MWR = Profit / (Valuation - Profit) * 100
+                # 분모가 0 이하가 되는 것 방지
+                valid_mwr = (m2['Valuation'] - m2['Profit']).abs() > 1e-9
+                m2.loc[valid_mwr, 'MWR'] = (m2.loc[valid_mwr, 'Profit'] / (m2.loc[valid_mwr, 'Valuation'] - m2.loc[valid_mwr, 'Profit'])) * 100
+                m2['MWR'] = m2['MWR'].fillna(0.0)
+                m2 = m2.sort_values(by='Date')
+                
+                # Plot
+                fig_mwr_compare = go.Figure()
+                fig_mwr_compare.add_trace(go.Scatter(x=m2['Date'], y=m2['TWR'], mode='lines', name='시간가중수익률 (TWR, 자산배분 성과)', line=dict(color='royalblue', width=2.5)))
+                fig_mwr_compare.add_trace(go.Scatter(x=m2['Date'], y=m2['MWR'], mode='lines', name='금액가중수익률 (MWR, 실제 지갑 성과)', line=dict(color='darkorange', width=2.5)))
+                
+                latest_row = m2.iloc[-1]
+                gap = latest_row['MWR'] - latest_row['TWR']
+                gap_sign = "+" if gap >= 0 else ""
+                
+                fig_mwr_compare.update_layout(
+                    title=f"전체 포트폴리오 TWR vs MWR 추이 (최신 행동격차: {gap_sign}{gap:.2f}%)",
+                    xaxis_title='날짜',
+                    yaxis_title='수익률 (%)',
+                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+                    hovermode="x unified"
+                )
+                st.plotly_chart(fig_mwr_compare, use_container_width=True)
+                
+                if gap >= 0:
+                    st.success(f"🎉 **긍정적인 행동 격차(Timing Alpha): {gap_sign}{gap:.2f}%**  \n시장 하락기나 조정 국면에서 자금을 효과적으로 추가 투입하여, 자산배분 기본 수익률보다 실제 계좌가 더 빠르게 늘어났습니다! 대단한 투자 의사결정입니다.")
+                else:
+                    st.warning(f"⚠️ **행동 격차(Behavior Gap): {gap:.2f}%**  \n포트폴리오 자체 수익률보다 실제 지갑 수익률이 약간 낮습니다. 이는 주로 급등장에서 매입을 몰아서 했거나 하락장에서 현금을 투입하지 못했을 때 생기는 현상입니다. 분할 적립식 자동 납입을 고려해보세요!")
+            else:
+                st.info("TWR/MWR 비교를 위한 공통 날짜 데이터가 부족합니다.")
+        except Exception as e:
+            st.error(f"TWR vs MWR 비교 차트 생성 중 오류: {e}")
+    else:
+        st.info("TWR vs MWR 비교를 위한 원천 데이터가 부족합니다.")
 
     # [NEW] 일별 총 자산 추이 그래프 (위치 이동됨)
     # --- 월별 총 자산 추이 섹션 ---
