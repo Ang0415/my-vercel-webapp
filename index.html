@@ -1,0 +1,1832 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="구글 시트 실시간 연동 포트폴리오 대시보드 - 고성능 정적 웹앱 및 Vercel 서버리스 연동">
+    <title>포트폴리오 대시보드</title>
+    <link rel="stylesheet" href="index.css">
+    <!-- Chart.js 최신 CDN 로드 -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1 id="dashboard-main-title">📊 포트폴리오 대시보드</h1>
+            <p>Vercel Serverless 백엔드 & Google Sheets</p>
+        </header>
+        <!-- 탭 탐색 내비게이션 바 -->
+        <nav class="tab-navigation" id="main-tab-nav">
+            <button class="tab-btn active" id="btn-stock-tab" onclick="switchTab('stock')">📊 주식 포트폴리오</button>
+            <button class="tab-btn" id="btn-budget-tab" onclick="switchTab('budget')">💸 스마트 가계부</button>
+        </nav>
+
+        <div class="info-bar">
+            <span id="data-status">데이터 연결 중...</span>
+            <button class="refresh-btn" id="refresh-button" onclick="refreshAllData()">
+                <span>🔄</span> 새로고침
+            </button>
+        </div>
+
+        <!-- 1. 주식 포트폴리오 탭 콘텐츠 -->
+        <div id="tab-stock" class="tab-content active">
+            <!-- 5개 핵심 지표 카드 영역 -->
+            <div class="grid" id="metrics-grid">
+                <!-- 1. 원금 카드 -->
+                <div class="card" id="card-principal">
+                    <div class="card-title">💼 원금 (추정)</div>
+                    <div class="card-value skeleton skeleton-value" id="principal-value"></div>
+                    <div class="card-subtext skeleton skeleton-subtext" id="principal-sub"></div>
+                </div>
+
+                <!-- 2. 총 평가액 카드 -->
+                <div class="card" id="card-asset">
+                    <div class="card-title">💰 총 평가액</div>
+                    <div class="card-value skeleton skeleton-value" id="asset-value"></div>
+                    <div class="card-subtext skeleton skeleton-subtext" id="asset-sub"></div>
+                </div>
+
+                <!-- 3. 전체 TWR 카드 -->
+                <div class="card" id="card-twr">
+                    <div class="card-title">📈 전체 TWR (기간)</div>
+                    <div class="card-value skeleton skeleton-value" id="twr-value"></div>
+                    <div class="card-subtext skeleton skeleton-subtext" id="twr-sub"></div>
+                </div>
+
+                <!-- 4. 전체 단순 손익 카드 -->
+                <div class="card" id="card-gainloss">
+                    <div class="card-title">💸 전체 단순 손익</div>
+                    <div class="card-value skeleton skeleton-value" id="gainloss-value"></div>
+                    <div class="card-subtext skeleton skeleton-subtext" id="gainloss-sub"></div>
+                </div>
+
+                <!-- 5. 성과 및 기대 수익률 카드 -->
+                <div class="card" id="card-expected" style="display: flex; flex-direction: column; justify-content: space-between;">
+                    <div>
+                        <div class="card-title">🎯 성과 및 기대 수익률</div>
+                        <div class="card-value skeleton skeleton-value" id="expected-value"></div>
+                        <div class="card-subtext skeleton skeleton-subtext" id="expected-sub"></div>
+                    </div>
+                    <div class="expected-list-container" id="expected-list" style="margin-top: 10px; border-top: 1px solid rgba(240, 246, 252, 0.15); padding-top: 8px;">
+                        <div class="skeleton skeleton-subtext" style="height: 12px; margin-bottom: 6px; width: 85%;"></div>
+                        <div class="skeleton skeleton-subtext" style="height: 12px; margin-bottom: 6px; width: 90%;"></div>
+                        <div class="skeleton skeleton-subtext" style="height: 12px; width: 75%;"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="section-container">
+                <!-- 자산 배분 섹션 -->
+                <div class="section-card">
+                    <div class="section-title">⚖️ 자산 배분 (현재 vs 목표 비중)</div>
+                    <div class="allocation-layout">
+                        <!-- 테이블 영역 -->
+                        <div class="table-wrapper">
+                            <table id="alloc-table">
+                                <thead>
+                                    <tr>
+                                        <th>종합 분류</th>
+                                        <th>현재 비중</th>
+                                        <th>목표 비중</th>
+                                        <th>차이</th>
+                                        <th>현재 평가액</th>
+                                        <th>목표 금액</th>
+                                        <th>현금 차이</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="alloc-table-body">
+                                    <tr>
+                                        <td colspan="7" class="skeleton skeleton-table"></td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <!-- 차트 영역 -->
+                        <div class="charts-row">
+                            <div class="chart-container-wrapper">
+                                <h4 class="chart-title-external">현재 자산 배분 비중</h4>
+                                <div class="chart-container">
+                                    <canvas id="currentAllocChart"></canvas>
+                                </div>
+                            </div>
+                            <div class="chart-container-wrapper">
+                                <h4 class="chart-title-external">목표 자산 배분 비중</h4>
+                                <div class="chart-container">
+                                    <canvas id="targetAllocChart"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- TWR 성과 분석 섹션 -->
+                <div class="section-card">
+                    <div class="section-title">📈 시간가중수익률 (TWR) 추이 분석</div>
+                    <div class="charts-column">
+                        <div style="margin-bottom: 24px;">
+                            <h4 style="margin-bottom: 12px; color: var(--text-secondary); text-align: center;">전체 포트폴리오 vs 지수 비교</h4>
+                            <div class="chart-container">
+                                <canvas id="twrIndexChart"></canvas>
+                            </div>
+                        </div>
+                        <div>
+                            <h4 style="margin-bottom: 12px; color: var(--text-secondary); text-align: center;">계좌별 TWR 추이</h4>
+                            <div class="chart-container">
+                                <canvas id="twrAccountsChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 월별 총 자산 추이 섹션 -->
+                <div class="section-card">
+                    <div class="section-title">📅 월별 총 자산 추이 (당월 1일 기준)</div>
+                    <div class="chart-container" style="min-height: 380px;">
+                        <canvas id="monthlyAssetsChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- 종목별 주가 추이 & 평단가 수평선 -->
+                <div class="section-card">
+                    <div class="section-title">🔍 종목별 주가 추이 및 평단가 (이동평균법)</div>
+                    <div class="stock-selector-container">
+                        <span class="select-label">종목 선택:</span>
+                        <select class="styled-select" id="stock-select" onchange="onStockSelected()">
+                            <option value="">불러오는 중...</option>
+                        </select>
+                        <div class="stock-stats">
+                            <span id="stock-avg-cost">평단가: -</span>
+                            <span id="stock-first-date">최초 매수일: -</span>
+                        </div>
+                    </div>
+                    <div class="chart-container" style="min-height: 350px;">
+                        <canvas id="stockDetailChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 2. 스마트 가계부 탭 콘텐츠 -->
+        <div id="tab-budget" class="tab-content">
+            <!-- 조회 연월 드롭다운 & 메타바 -->
+            <div class="budget-meta-container">
+                <div class="budget-meta-item">
+                    <span class="select-label">조회 연월 선택:</span>
+                    <select class="styled-select" id="budget-month-select" onchange="onBudgetMonthChanged()">
+                        <option value="">불러오는 중...</option>
+                    </select>
+                </div>
+                <div id="budget-sync-status" style="font-size: 0.875rem; color: var(--text-secondary);">가계부 동기화 중...</div>
+            </div>
+
+            <!-- 핵심 지표 및 대출 도우미 (그리드 구성) -->
+            <div style="display: grid; grid-template-columns: 1fr; gap: 24px; margin-bottom: 40px;" class="budget-top-layout">
+                <!-- 4개 핵심 지표 카드 영역 -->
+                <div class="grid" id="budget-metrics-grid" style="margin-bottom: 0;">
+                    <!-- 1. 수입 카드 -->
+                    <div class="card" id="card-budget-income">
+                        <div class="card-title">💵 이번 달 총 수입</div>
+                        <div class="card-value skeleton skeleton-value" id="budget-income-value"></div>
+                        <div class="card-subtext skeleton skeleton-subtext" id="budget-income-sub"></div>
+                    </div>
+                    <!-- 2. 지출 카드 -->
+                    <div class="card" id="card-budget-expense">
+                        <div class="card-title">💸 이번 달 총 지출</div>
+                        <div class="card-value skeleton skeleton-value" id="budget-expense-value"></div>
+                        <div class="card-subtext skeleton skeleton-subtext" id="budget-expense-sub"></div>
+                    </div>
+                    <!-- 3. 순저축액 카드 -->
+                    <div class="card" id="card-budget-savings">
+                        <div class="card-title">🛡️ 이번 달 순저축액</div>
+                        <div class="card-value skeleton skeleton-value" id="budget-savings-value"></div>
+                        <div class="card-subtext skeleton skeleton-subtext" id="budget-savings-sub"></div>
+                    </div>
+                    <!-- 4. 예산 소진율 카드 -->
+                    <div class="card" id="card-budget-util">
+                        <div class="card-title">🎯 지출 예산 소진율</div>
+                        <div class="card-value skeleton skeleton-value" id="budget-util-value"></div>
+                        <div class="card-subtext skeleton skeleton-subtext" id="budget-util-sub"></div>
+                    </div>
+                </div>
+
+                <!-- 저축/대출 의사결정 도우미 -->
+                <div class="section-card decision-card" style="margin-bottom: 0;">
+                    <div class="section-title" style="border-bottom: none; padding-bottom: 0; margin-bottom: 8px;">⚖️ 저축·투자 & 대출 의사결정 도우미</div>
+                    <p style="font-size: 0.85rem; color: var(--text-secondary); line-height: 1.4; margin-bottom: 12px;">여유자금은 대출상환보다 기대수익률이 더 높은 자산(주식, ISA 등)에 분산하는 것이 재무적으로 유리합니다.</p>
+                    <div class="helper-stats-row">
+                        <div class="helper-stat-item">
+                            <div class="helper-stat-label">대출 시작 총원금</div>
+                            <div class="helper-stat-value" id="loan-start-principal">-</div>
+                        </div>
+                        <div class="helper-stat-item">
+                            <div class="helper-stat-label">현재 대출 잔액</div>
+                            <div class="helper-stat-value" id="loan-current-principal">-</div>
+                        </div>
+                        <div class="helper-stat-item">
+                            <div class="helper-stat-label">누적 상환원금</div>
+                            <div class="helper-stat-value" id="loan-accum-repayment">-</div>
+                        </div>
+                        <div class="helper-stat-item">
+                            <div class="helper-stat-label">대출 현재 상환율</div>
+                            <div class="helper-stat-value" id="loan-repayment-rate">-</div>
+                        </div>
+                        <div class="helper-stat-item">
+                            <div class="helper-stat-label">실질 대출금리</div>
+                            <div class="helper-stat-value" id="loan-avg-interest-rate">-</div>
+                            <div style="font-size: 0.72rem; color: var(--text-secondary); margin-top: 4px;" id="loan-avg-interest-sub">(표면 연 -)</div>
+                        </div>
+                        <div class="helper-stat-item">
+                            <div class="helper-stat-label">투자 - 대출 스프레드</div>
+                            <div class="helper-stat-value" id="loan-spread" style="color: var(--accent-green); font-weight: 700;">-</div>
+                        </div>
+                    </div>
+                    
+                    <!-- 🔍 개별 대출 아코디언 토글 추가 -->
+                    <div class="loan-accordion-wrapper" style="margin-top: 24px; border-top: 1px solid rgba(240, 246, 252, 0.1); padding-top: 16px;">
+                        <button class="accordion-toggle-btn" onclick="toggleLoanDetails()">
+                            <span>🔍</span> 개별 대출 상세 현황 및 맞춤 상환 전략 보기 <span id="accordion-arrow">▼</span>
+                        </button>
+                        <div class="accordion-content" id="loan-details-content">
+                            <div class="table-wrapper" style="margin-top: 10px;">
+                                <table id="loan-details-table">
+                                    <thead>
+                                        <tr>
+                                            <th>대출 항목명</th>
+                                            <th>현재 대출 잔액</th>
+                                            <th>표면 금리</th>
+                                            <th>회사 지원</th>
+                                            <th>실질 금리</th>
+                                            <th>상환 방식</th>
+                                            <th>투자 대비 스프레드</th>
+                                            <th>추천 행동 전략</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="loan-details-tbody">
+                                        <!-- Dynamic JS Binding -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="section-container">
+                <!-- 🔒 최근 6개월 고정 지출 레이더 -->
+                <div class="section-card fixed-radar-card">
+                    <div class="section-title">🔒 최근 6개월 고정 지출 레이더 (정기/유사 고정비)</div>
+                    <div class="radar-layout">
+                        <!-- 고정비 비중 게이지바 -->
+                        <div class="gauge-wrapper">
+                            <div class="gauge-meta">
+                                <span class="gauge-label">월 소득 대비 고정 지출 비중</span>
+                                <span class="gauge-value" id="fixed-ratio-val">-</span>
+                            </div>
+                            <div class="progress-bar-bg">
+                                <div class="progress-bar-fill" id="fixed-ratio-bar" style="width: 0%"></div>
+                            </div>
+                            <div class="gauge-sub" id="fixed-ratio-status">고정 지출 데이터를 분석하는 중...</div>
+                        </div>
+
+                        <!-- 고정 지출 분류 그리드 -->
+                        <div class="fixed-lists-grid">
+                            <!-- 완전 고정비 목록 -->
+                            <div class="fixed-list-wrapper">
+                                <h4 class="list-headline">📅 정기 완전 고정비 (평균 청구액)</h4>
+                                <ul class="fixed-items-list" id="strict-fixed-list">
+                                    <li class="empty-list-msg">불러오는 중...</li>
+                                </ul>
+                            </div>
+                            <!-- 유사 고정비 목록 -->
+                            <div class="fixed-list-wrapper">
+                                <h4 class="list-headline">🔄 생활 밀착형 유사 고정비 (6개월 평균)</h4>
+                                <ul class="fixed-items-list" id="quasi-fixed-list">
+                                    <li class="empty-list-msg">불러오는 중...</li>
+                                </ul>
+                            </div>
+                        </div>
+
+                        <!-- 요약 배너 -->
+                        <div class="fixed-summary-banner">
+                            <div class="summary-total-desc">
+                                💡 최근 6개월 데이터 기준, 회원님의 숨은 월평균 고정 지출 총액은 <strong id="fixed-total-amount">- 원</strong> 입니다.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <!-- 테이블 영역 (카테고리별 예산 vs 실지출 & 신용카드 청구액) -->
+                <div style="display: grid; grid-template-columns: 1fr; gap: 24px;" class="budget-tables-layout">
+
+                    <!-- 현재기준 통장 잔액 -->
+                    <div class="section-card">
+                        <div class="section-title">🏦 현재기준 통장 잔액 (잔액 많은 순)</div>
+                        <div class="table-wrapper">
+                            <table id="budget-account-table">
+                                <thead>
+                                    <tr>
+                                        <th>은행/통장명</th>
+                                        <th>현재 잔액</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="budget-account-body">
+                                    <tr>
+                                        <td colspan="2" class="skeleton skeleton-table"></td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Antigravity 스마트 가계 정밀 진단 리포트 -->
+                <div class="section-card report-card">
+                    <div class="section-title">💡 Antigravity 스마트 가계 정밀 진단 리포트</div>
+                    <div class="report-content" id="budget-diagnostic-report">데이터를 분석하는 중입니다...</div>
+                </div>
+
+                <!-- 차트 그리드 영역 (2x2 구성) -->
+                <div class="charts-grid">
+                    <!-- 1. 대분류별 소비 비중 -->
+                    <div class="section-card">
+                        <div class="section-title">🍕 대분류별 소비 비중 (이번 달)</div>
+                        <div class="chart-container">
+                            <canvas id="budgetCategoryChart"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- 2. 지출 TOP 8 소분류 비중 -->
+                    <div class="section-card">
+                        <div class="section-title">🍩 이번 달 지출 TOP 8 소분류 비중</div>
+                        <div class="chart-container">
+                            <canvas id="budgetTopSubcatChart"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- 3. 카테고리별 예산 대비 실지출 -->
+                    <div class="section-card">
+                        <div class="section-title">📊 카테고리별 예산 대비 실지출 (Actual vs. Budget)</div>
+                        <div class="chart-container">
+                            <canvas id="budgetBudgetvsActualChart"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- 4. 신용카드사별 이번 달 사용액 -->
+                    <div class="section-card">
+                        <div class="section-title">💳 신용카드사별 이번 달 사용액</div>
+                        <div class="chart-container">
+                            <canvas id="budgetCardRankChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+    </div>
+
+    <script>
+        // 차트 인스턴스 전역 저장소
+        let charts = {};
+
+        // 원화 단위 축소 포맷팅 함수 (1.1억, 9.4천만, 7.5백만, 92만 등)
+        function formatKrwShort(val) {
+            if (val < 0) return "-";
+            if (val >= 99500000) {
+                const eokVal = val / 100000000;
+                const eokStr = eokVal.toFixed(1).replace(/\.0$/, '');
+                return `${eokStr}억`;
+            } else if (val >= 9950000) {
+                const cheonManVal = val / 10000000;
+                const cheonManStr = cheonManVal.toFixed(1).replace(/\.0$/, '');
+                return `${cheonManStr}천만`;
+            } else if (val >= 950000) {
+                const manVal = val / 1000000;
+                const manStr = manVal.toFixed(1).replace(/\.0$/, '');
+                return `${manStr}백만`;
+            } else if (val >= 10000) {
+                const tenManVal = val / 10000;
+                const tenManStr = tenManVal.toFixed(0);
+                return `${tenManStr}만`;
+            } else {
+                return `${val.toLocaleString()}원`;
+            }
+        }
+
+
+
+        // --- 상단 수치 합계 라벨 그리기 플러그인 (Chart.js용) ---
+        const topTextPlugin = {
+            id: 'topTextPlugin',
+            afterDraw: (chart) => {
+                const { ctx, data } = chart;
+                ctx.save();
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'bottom';
+                ctx.font = 'bold 11px Inter, sans-serif';
+                ctx.fillStyle = '#f0f6fc';
+
+                // 모든 스택 데이터 인덱스별로 합산
+                const totals = [];
+                data.datasets.forEach(dataset => {
+                    dataset.data.forEach((val, i) => {
+                        totals[i] = (totals[i] || 0) + val;
+                    });
+                });
+
+                // 최상위 데이터셋의 메타데이터 활용하여 좌표 획득
+                const meta = chart.getDatasetMeta(data.datasets.length - 1);
+                meta.data.forEach((bar, i) => {
+                    const total = totals[i];
+                    if (total > 0) {
+                        const text = formatKrwShort(total);
+                        ctx.fillText(text, bar.x, bar.y - 8);
+                    }
+                });
+                ctx.restore();
+            }
+        };
+
+        // 다채롭고 고급스러운 비주얼의 11색상 팔레트
+        const vibrantColors = [
+            '#58a6ff', // Sky blue
+            '#3fb950', // Emerald green
+            '#d29922', // Amber gold
+            '#f85149', // Coral red
+            '#bc8cff', // Lavender purple
+            '#ff7b72', // Salmon pink
+            '#56e3b8', // Mint teal
+            '#ff9e3b', // Vibrant orange
+            '#79c0ff', // Light blue
+            '#44f35b', // Bright green
+            '#ff58a6'  // Neon pink
+        ];
+
+        // 도넛 차트 내부에 각 비중(%)과 카테고리명을 함께 그려주는 플러그인 (비좁은 경우 지시선 사용 및 겹침 방지)
+        const donutLabelsPlugin = {
+            id: 'donutLabelsPlugin',
+            afterDraw: (chart) => {
+                const { ctx, data } = chart;
+                if (chart.config.type !== 'doughnut') return;
+                
+                ctx.save();
+                const meta = chart.getDatasetMeta(0);
+                const total = data.datasets[0].data.reduce((a, b) => a + b, 0);
+                
+                const externalItems = [];
+                
+                meta.data.forEach((arc, i) => {
+                    const value = data.datasets[0].data[i];
+                    const label = data.labels[i];
+                    const pct = total > 0 ? ((value / total) * 100) : 0;
+                    
+                    if (pct >= 8.0) {
+                        // 충분히 큰 슬라이스는 내부에 표시
+                        const center = arc.getCenterPoint();
+                        ctx.fillStyle = '#ffffff';
+                        ctx.textAlign = 'center';
+                        ctx.textBaseline = 'middle';
+                        ctx.font = 'bold 10px Inter, sans-serif';
+                        ctx.fillText(label, center.x, center.y - 7);
+                        ctx.font = 'normal 10px Inter, sans-serif';
+                        ctx.fillText(`${pct.toFixed(1)}%`, center.x, center.y + 7);
+                    } else if (pct > 0.5) {
+                        // 좁은 조각은 외부 레이블로 그릴 준비를 위해 수집
+                        const midAngle = (arc.startAngle + arc.endAngle) / 2;
+                        const cos = Math.cos(midAngle);
+                        const sin = Math.sin(midAngle);
+                        
+                        const x1 = arc.x + cos * arc.outerRadius;
+                        const y1 = arc.y + sin * arc.outerRadius;
+                        
+                        const lineLength = 22;
+                        const x2 = arc.x + cos * (arc.outerRadius + lineLength);
+                        const y2 = arc.y + sin * (arc.outerRadius + lineLength);
+                        
+                        externalItems.push({
+                            index: i,
+                            label: label,
+                            pct: pct,
+                            x1: x1,
+                            y1: y1,
+                            x2: x2,
+                            y2: y2,
+                            cos: cos,
+                            sin: sin,
+                            isRight: cos >= 0,
+                            color: data.datasets[0].backgroundColor[i] || 'rgba(240, 246, 252, 0.4)'
+                        });
+                    }
+                });
+
+                // 좌우 분할
+                const rightItems = externalItems.filter(item => item.isRight);
+                const leftItems = externalItems.filter(item => !item.isRight);
+
+                // Y 좌표 기준으로 위에서 아래로 정렬 (12시 방향부터 6시 방향 순서)
+                rightItems.sort((a, b) => a.y2 - b.y2);
+                leftItems.sort((a, b) => a.y2 - b.y2);
+
+                // Relaxation 알고리즘으로 Y축 겹침 방지 (좌/우 각각 적용)
+                const adjustY = (list) => {
+                    if (list.length === 0) return;
+                    const minGap = 18;
+                    
+                    // 1차 패스: 위에서 아래로 밀어내며 간격 유지
+                    for (let i = 1; i < list.length; i++) {
+                        if (list[i].y2 < list[i - 1].y2 + minGap) {
+                            list[i].y2 = list[i - 1].y2 + minGap;
+                        }
+                    }
+                    
+                    // 2차 패스: 아래에서 위로 밀어내며 균형 조절
+                    for (let i = list.length - 2; i >= 0; i--) {
+                        if (list[i].y2 > list[i + 1].y2 - minGap) {
+                            list[i].y2 = list[i + 1].y2 - minGap;
+                        }
+                    }
+                    
+                    // 3차 패스: 캔버스 상단/하단 경계 이탈 방지
+                    const topLimit = 15;
+                    const bottomLimit = chart.height - 15;
+                    
+                    if (list[0].y2 < topLimit) {
+                        list[0].y2 = topLimit;
+                        for (let i = 1; i < list.length; i++) {
+                            if (list[i].y2 < list[i - 1].y2 + minGap) {
+                                list[i].y2 = list[i - 1].y2 + minGap;
+                            }
+                        }
+                    }
+                    
+                    if (list[list.length - 1].y2 > bottomLimit) {
+                        list[list.length - 1].y2 = bottomLimit;
+                        for (let i = list.length - 2; i >= 0; i--) {
+                            if (list[i].y2 > list[i + 1].y2 - minGap) {
+                                list[i].y2 = list[i + 1].y2 - minGap;
+                            }
+                        }
+                    }
+                };
+
+                adjustY(rightItems);
+                adjustY(leftItems);
+
+                // 레이블 및 지시선 그리기
+                const drawItem = (item) => {
+                    const { label, pct, x1, y1, x2, y2, isRight, color } = item;
+                    const y3 = y2;
+                    const x3 = x2 + (isRight ? 12 : -12);
+
+                    // 1. 지시선 그리기
+                    ctx.beginPath();
+                    ctx.strokeStyle = color;
+                    ctx.lineWidth = 1.2;
+                    ctx.moveTo(x1, y1);
+                    ctx.lineTo(x2, y3);
+                    ctx.lineTo(x3, y3);
+                    ctx.stroke();
+
+                    // 2. 지시선 앵커 점(Dot)
+                    ctx.beginPath();
+                    ctx.fillStyle = color;
+                    ctx.arc(x1, y1, 2.5, 0, 2 * Math.PI);
+                    ctx.fill();
+
+                    // 3. 텍스트 라벨 출력
+                    ctx.fillStyle = '#ffffff';
+                    ctx.textBaseline = 'middle';
+                    if (isRight) {
+                        ctx.textAlign = 'left';
+                        ctx.font = 'bold 9px Inter, sans-serif';
+                        ctx.fillText(label, x3 + 4, y3 - 5);
+                        ctx.font = 'normal 9px Inter, sans-serif';
+                        ctx.fillText(`${pct.toFixed(1)}%`, x3 + 4, y3 + 5);
+                    } else {
+                        ctx.textAlign = 'right';
+                        ctx.font = 'bold 9px Inter, sans-serif';
+                        ctx.fillText(label, x3 - 4, y3 - 5);
+                        ctx.font = 'normal 9px Inter, sans-serif';
+                        ctx.fillText(`${pct.toFixed(1)}%`, x3 - 4, y3 + 5);
+                    }
+                };
+
+                rightItems.forEach(drawItem);
+                leftItems.forEach(drawItem);
+
+                ctx.restore();
+            }
+        };
+
+        // 신용카드 실적선 표시용 커스텀 플러그인
+        const cardThresholdPlugin = {
+            id: 'cardThresholdPlugin',
+            afterDatasetsDraw: (chart) => {
+                const { ctx, data, scales: { x, y } } = chart;
+                if (chart.canvas.id !== 'budgetCardRankChart') return;
+                
+                ctx.save();
+                const meta = chart.getDatasetMeta(0);
+                
+                data.labels.forEach((label, i) => {
+                    const threshold = label.includes('하나HD') ? 200000 : 300000;
+                    
+                    const xPixel = x.getPixelForValue(threshold);
+                    const bar = meta.data[i];
+                    if (!bar) return;
+                    
+                    const yCenter = bar.y;
+                    const barHeight = bar.height || 18;
+                    const yTop = yCenter - barHeight / 2 - 3;
+                    const yBottom = yCenter + barHeight / 2 + 3;
+                    
+                    if (xPixel >= x.left && xPixel <= x.right) {
+                        ctx.beginPath();
+                        ctx.strokeStyle = '#ffffff';
+                        ctx.lineWidth = 1.5;
+                        ctx.setLineDash([4, 3]);
+                        ctx.moveTo(xPixel, yTop);
+                        ctx.lineTo(xPixel, yBottom);
+                        ctx.stroke();
+                        
+                        ctx.fillStyle = '#8b949e';
+                        ctx.font = 'bold 9px Inter, sans-serif';
+                        ctx.textAlign = 'center';
+                        ctx.textBaseline = 'bottom';
+                        ctx.fillText(threshold === 200000 ? '20만' : '30만', xPixel, yTop - 2);
+                    }
+                });
+                ctx.restore();
+            }
+        };
+
+        // UI 스켈레톤 상태 노출
+        function showAllSkeletons() {
+            // 메트릭 카드 스켈레톤
+            const metrics = [
+                { valId: 'principal-value', subId: 'principal-sub' },
+                { valId: 'asset-value', subId: 'asset-sub' },
+                { valId: 'twr-value', subId: 'twr-sub' },
+                { valId: 'gainloss-value', subId: 'gainloss-sub' },
+                { valId: 'expected-value', subId: 'expected-sub' }
+            ];
+            metrics.forEach(item => {
+                try {
+                    const valEl = document.getElementById(item.valId);
+                    const subEl = document.getElementById(item.subId);
+                    if (valEl) {
+                        valEl.innerText = '';
+                        valEl.className = 'card-value skeleton skeleton-value';
+                    }
+                    if (subEl) {
+                        subEl.innerText = '';
+                        subEl.className = 'card-subtext skeleton skeleton-subtext';
+                    }
+                } catch (e) {
+                    console.error('Metrics skeleton error for ' + item.valId + ':', e);
+                }
+            });
+
+            // 5번째 카드 성적표 스켈레톤 초기화
+            try {
+                const listEl = document.getElementById('expected-list');
+                if (listEl) {
+                    listEl.innerHTML = `
+                        <div class="skeleton skeleton-subtext" style="height: 12px; margin-bottom: 6px; width: 85%;"></div>
+                        <div class="skeleton skeleton-subtext" style="height: 12px; margin-bottom: 6px; width: 90%;"></div>
+                        <div class="skeleton skeleton-subtext" style="height: 12px; width: 75%;"></div>
+                    `;
+                }
+            } catch (e) {
+                console.error('Expected list skeleton error:', e);
+            }
+
+            // 테이블 스켈레톤
+            try {
+                const allocTableBody = document.getElementById('alloc-table-body');
+                if (allocTableBody) {
+                    allocTableBody.innerHTML = `
+                        <tr>
+                            <td colspan="7"><div class="skeleton skeleton-table" style="height: 150px;"></div></td>
+                        </tr>
+                    `;
+                }
+            } catch (e) {
+                console.error('Alloc table skeleton error:', e);
+            }
+
+            const statusEl = document.getElementById('data-status');
+            if (statusEl) statusEl.innerText = '실시간 데이터 불러오는 중...';
+        }
+
+        // 개별 대출 아코디언 접고 펴는 함수 (부드러운 애니메이션 효과 포함)
+        function toggleLoanDetails() {
+            const content = document.getElementById('loan-details-content');
+            const arrow = document.getElementById('accordion-arrow');
+            
+            if (content.style.maxHeight && content.style.maxHeight !== '0px') {
+                content.style.maxHeight = '0px';
+                arrow.innerText = '▼';
+            } else {
+                content.style.maxHeight = content.scrollHeight + 'px';
+                arrow.innerText = '▲';
+            }
+        }
+
+        // 대출 의사결정 도우미 화면 업데이트 함수 (실시간 포트폴리오 수익률 및 실시간 대출금리/잔액 연동)
+        function updateLoanHelperUI() {
+            if (!window.loanHelper) return;
+            
+            const startPrincipal = window.loanHelper.start_principal;
+            const currentPrincipal = window.loanHelper.current_principal || 0;
+            const repayment = window.loanHelper.repayment;
+            const repaymentRate = window.loanHelper.repayment_rate;
+            const loanInterestRate = window.loanHelper.loan_interest_rate || 3.8;
+            const effectiveInterestRate = window.loanHelper.effective_loan_interest_rate || loanInterestRate;
+            
+            const pStartEl = document.getElementById('loan-start-principal');
+            const pCurrentEl = document.getElementById('loan-current-principal');
+            const pAccumEl = document.getElementById('loan-accum-repayment');
+            const rateEl = document.getElementById('loan-repayment-rate');
+            const interestEl = document.getElementById('loan-avg-interest-rate');
+            const interestSubEl = document.getElementById('loan-avg-interest-sub');
+            const spreadEl = document.getElementById('loan-spread');
+            
+            if (pStartEl) pStartEl.innerText = startPrincipal.toLocaleString() + ' 원';
+            if (pCurrentEl) pCurrentEl.innerText = currentPrincipal.toLocaleString() + ' 원';
+            if (pAccumEl) pAccumEl.innerText = repayment.toLocaleString() + ' 원';
+            if (rateEl) rateEl.innerText = repaymentRate.toFixed(1) + ' %';
+            if (interestEl) interestEl.innerText = '연 ' + effectiveInterestRate.toFixed(2) + '%';
+            if (interestSubEl) interestSubEl.innerText = `(표면 연 ${loanInterestRate.toFixed(2)}%)`;
+            
+            // Calculate spread dynamically using portfolio expected return and effective interest rate
+            const portfolioReturn = window.expectedAnnualReturn !== undefined ? window.expectedAnnualReturn : 5.0;
+            const spread = portfolioReturn - effectiveInterestRate;
+            
+            if (spreadEl) {
+                const spreadStr = (spread >= 0 ? '+' : '') + spread.toFixed(2) + '%';
+                spreadEl.innerText = spreadStr;
+                spreadEl.className = 'helper-stat-value ' + (spread > 0 ? 'up' : (spread < 0 ? 'down' : 'neutral'));
+            }
+
+            // 개별 대출 상세 테이블 동적 바인딩
+            const tbody = document.getElementById('loan-details-tbody');
+            if (tbody && window.loanHelper.individual_loans) {
+                tbody.innerHTML = '';
+                
+                window.loanHelper.individual_loans.forEach(loan => {
+                    const tr = document.createElement('tr');
+                    
+                    // 투자 대비 개별 스프레드 계산
+                    const individualSpread = portfolioReturn - loan.effective_rate;
+                    const spreadStr = (individualSpread >= 0 ? '+' : '') + individualSpread.toFixed(2) + '%';
+                    const spreadClass = individualSpread > 0 ? 'up font-semibold' : (individualSpread < 0 ? 'down font-semibold' : 'neutral font-semibold');
+                    
+                    // 추천 행동 전략 뱃지 및 문구 설정 (회사 대출의 경우 3% 지원 혜택 언급하며 유지 권장)
+                    let strategyHtml = '';
+                    if (loan.name.includes('회사대출')) {
+                        strategyHtml = `<span class="badge" style="background: rgba(56, 139, 253, 0.15); color: var(--accent-blue); border: 1px solid rgba(56, 139, 253, 0.3);">💰 대출 유지 & 적극 투자!</span>`;
+                    } else if (individualSpread > 1.5) {
+                        strategyHtml = `<span class="badge badge-up">📈 투자 유리 (유지)</span>`;
+                    } else {
+                        strategyHtml = `<span class="badge badge-down">🚨 중도 상환 검토</span>`;
+                    }
+                    
+                    tr.innerHTML = `
+                        <td class="bold-cat">${loan.name}</td>
+                        <td class="num-align">${loan.balance.toLocaleString()}원</td>
+                        <td class="num-align">연 ${loan.nominal_rate.toFixed(2)}%</td>
+                        <td class="num-align" style="color: var(--accent-green); font-weight: 550;">${loan.subsidy_rate > 0 ? '연 ' + loan.subsidy_rate.toFixed(2) + '%' : '-'}</td>
+                        <td class="num-align" style="font-weight: 600;">연 ${loan.effective_rate.toFixed(2)}%</td>
+                        <td>${loan.method}</td>
+                        <td class="${spreadClass}">${spreadStr}</td>
+                        <td>${strategyHtml}</td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+            }
+        }
+
+        // 1. 대시보드 상단 개요 데이터 로드
+        function loadOverviewData() {
+            return fetch('/api/overview')
+                .then(res => res.json())
+                .then(data => {
+                    if (data.total_asset_str === '에러 발생 🚨') {
+                        const statusEl = document.getElementById('data-status');
+                        if (statusEl) statusEl.innerText = '구글 시트 연동 에러 🚨';
+                        return;
+                    }
+                    // 원금
+                    try {
+                        const pVal = document.getElementById('principal-value');
+                        const pSub = document.getElementById('principal-sub');
+                        if (pVal) {
+                            pVal.innerText = data.total_principal_str + ' 원';
+                            pVal.className = 'card-value';
+                        }
+                        if (pSub) {
+                            pSub.innerText = '계좌 전체 투자 원금';
+                            pSub.className = 'card-subtext neutral';
+                        }
+                    } catch (e) { console.error('Principal binding error:', e); }
+
+                    // 총 평가액
+                    try {
+                        const aVal = document.getElementById('asset-value');
+                        const aSub = document.getElementById('asset-sub');
+                        if (aVal) {
+                            aVal.innerText = data.total_asset_str + ' 원';
+                            aVal.className = 'card-value';
+                        }
+                        if (aSub) {
+                            aSub.innerText = '실시간 평가 잔고 합계';
+                            aSub.className = 'card-subtext neutral';
+                        }
+                    } catch (e) { console.error('Asset binding error:', e); }
+
+                    // 전체 TWR
+                    try {
+                        const tVal = document.getElementById('twr-value');
+                        const tSub = document.getElementById('twr-sub');
+                        if (tVal) {
+                            tVal.innerText = data.twr_str;
+                            tVal.className = 'card-value ' + (data.twr > 0 ? 'up' : (data.twr < 0 ? 'down' : 'neutral'));
+                        }
+                        if (tSub) {
+                            tSub.innerText = '시간가중수익률(TWR)';
+                            tSub.className = 'card-subtext ' + (data.twr > 0 ? 'up' : (data.twr < 0 ? 'down' : 'neutral'));
+                        }
+                    } catch (e) { console.error('TWR binding error:', e); }
+
+                    // 단순 손익
+                    try {
+                        const gVal = document.getElementById('gainloss-value');
+                        const gSub = document.getElementById('gainloss-sub');
+                        if (gVal) {
+                            gVal.innerText = data.gain_loss_amount_str + ' 원';
+                            gVal.className = 'card-value ' + (data.gain_loss_amount > 0 ? 'up' : (data.gain_loss_amount < 0 ? 'down' : 'neutral'));
+                        }
+                        if (gSub) {
+                            gSub.innerText = '누적 수익률: ' + data.gain_loss_rate_str;
+                            gSub.className = 'card-subtext ' + (data.gain_loss_amount > 0 ? 'up' : (data.gain_loss_amount < 0 ? 'down' : 'neutral'));
+                        }
+                    } catch (e) { console.error('Gainloss binding error:', e); }
+
+                    // 기대수익률 및 연도별 수익률 카드 바인딩
+                    try {
+                        if (data.expected_annual_return !== undefined) {
+                            window.expectedAnnualReturn = data.expected_annual_return;
+                            const eVal = document.getElementById('expected-value');
+                            const eSub = document.getElementById('expected-sub');
+                            if (eVal) {
+                                eVal.innerText = '연 ' + data.expected_annual_return.toFixed(2) + '%';
+                                eVal.className = 'card-value expected-val-color';
+                            }
+                            if (eSub) {
+                                eSub.innerText = '포트폴리오 연평균 기대치';
+                                eSub.className = 'card-subtext neutral';
+                            }
+                            // 대출 의사결정 도우미 화면 업데이트
+                            if (typeof updateLoanHelperUI === 'function') {
+                                updateLoanHelperUI();
+                            }
+                        }
+                    } catch (e) { console.error('Expected yield binding error:', e); }
+
+                    try {
+                        if (data.annual_returns) {
+                            const listContainer = document.getElementById('expected-list');
+                            if (listContainer) {
+                                listContainer.innerHTML = '';
+                                listContainer.className = 'expected-list-container';
+                                
+                                const years = ["2024", "2025", "2026_YTD"];
+                                years.forEach(year => {
+                                    let val = data.annual_returns[year];
+                                    if (val !== undefined) {
+                                        const item = document.createElement('div');
+                                        item.className = 'expected-list-item';
+                                        item.style.display = 'flex';
+                                        item.style.justify = 'space-between';
+                                        item.style.fontSize = '0.8rem';
+                                        item.style.marginBottom = '3px';
+                                        
+                                        const labelSpan = document.createElement('span');
+                                        labelSpan.style.color = 'var(--text-secondary)';
+                                        labelSpan.innerText = year === "2026_YTD" ? "• 2026년 (YTD)" : `• ${year}년`;
+                                        
+                                        const valSpan = document.createElement('span');
+                                        const sign = val > 0 ? '+' : '';
+                                        valSpan.innerText = `${sign}${val.toFixed(2)}%`;
+                                        valSpan.className = val > 0 ? 'up font-semibold' : (val < 0 ? 'down font-semibold' : 'neutral font-semibold');
+                                        
+                                        item.appendChild(labelSpan);
+                                        item.appendChild(valSpan);
+                                        listContainer.appendChild(item);
+                                    }
+                                });
+                            }
+                        }
+                    } catch (e) { console.error('Yearly returns list binding error:', e); }
+                });
+        }
+
+        // 2. 자산 배분 데이터 로드 및 시각화
+        function loadAllocationData() {
+            return fetch('/api/allocation')
+                .then(res => res.json())
+                .then(data => {
+                    if (data.error) throw new Error(data.error);
+
+                    const tbody = document.getElementById('alloc-table-body');
+                    tbody.innerHTML = '';
+
+                    const categories = [];
+                    const currentWeights = [];
+                    const targetWeights = [];
+
+                    data.comparison.forEach(item => {
+                        const tr = document.createElement('tr');
+                        
+                        const diffWeightClass = item.diff_weight > 0 ? 'up' : (item.diff_weight < 0 ? 'down' : 'neutral');
+                        const diffWeightStr = item.diff_weight > 0 ? `+${item.diff_weight}%` : `${item.diff_weight}%`;
+                        const diffAmountClass = item.diff_amount > 0 ? 'up' : (item.diff_amount < 0 ? 'down' : 'neutral');
+                        const diffAmountStr = item.diff_amount > 0 ? `+${item.diff_amount.toLocaleString()} 원` : `${item.diff_amount.toLocaleString()} 원`;
+
+                        tr.innerHTML = `
+                            <td class="bold-cat">${item.category}</td>
+                            <td>${item.current_weight}%</td>
+                            <td>${item.target_weight}%</td>
+                            <td class="${diffWeightClass}">${diffWeightStr}</td>
+                            <td>${item.current_amount.toLocaleString()} 원</td>
+                            <td>${item.target_amount.toLocaleString()} 원</td>
+                            <td class="${diffAmountClass}">${diffAmountStr}</td>
+                        `;
+                        tbody.appendChild(tr);
+
+                        if (item.current_weight > 0 || item.target_weight > 0) {
+                            categories.push(item.category);
+                            currentWeights.push(item.current_weight);
+                            targetWeights.push(item.target_weight);
+                        }
+                    });
+
+                    // 도넛 차트 생성
+                    if (charts.currentAlloc) charts.currentAlloc.destroy();
+                    if (charts.targetAlloc) charts.targetAlloc.destroy();
+
+                    const commonOptions = {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        layout: {
+                            padding: {
+                                left: 70,
+                                right: 70,
+                                top: 25,
+                                bottom: 25
+                            }
+                        },
+                        plugins: {
+                            legend: { display: false }
+                        }
+                    };
+
+                    const currentCtx = document.getElementById('currentAllocChart').getContext('2d');
+                    charts.currentAlloc = new Chart(currentCtx, {
+                        type: 'doughnut',
+                        data: {
+                            labels: categories,
+                            datasets: [{
+                                data: currentWeights,
+                                backgroundColor: vibrantColors,
+                                borderWidth: 1,
+                                borderColor: '#0d1117'
+                            }]
+                        },
+                        options: {
+                            ...commonOptions,
+                            plugins: {
+                                ...commonOptions.plugins,
+                                title: { display: false }
+                            }
+                        },
+                        plugins: [donutLabelsPlugin]
+                    });
+
+                    const targetCtx = document.getElementById('targetAllocChart').getContext('2d');
+                    charts.targetAlloc = new Chart(targetCtx, {
+                        type: 'doughnut',
+                        data: {
+                            labels: categories,
+                            datasets: [{
+                                data: targetWeights,
+                                backgroundColor: vibrantColors,
+                                borderWidth: 1,
+                                borderColor: '#0d1117'
+                            }]
+                        },
+                        options: {
+                            ...commonOptions,
+                            plugins: {
+                                ...commonOptions.plugins,
+                                title: { display: false }
+                            }
+                        },
+                        plugins: [donutLabelsPlugin]
+                    });
+                });
+        }
+
+        // 3. TWR 성과 데이터 로드 및 시각화
+        function loadTwrData() {
+            return fetch('/api/twr')
+                .then(res => res.json())
+                .then(data => {
+                    if (data.error) throw new Error(data.error);
+
+                    // 3-1. 포트폴리오 vs 지수 비교 차트
+                    const dates = data.accounts.Total.map(x => x.Date);
+                    const portfolioTwr = data.accounts.Total.map(x => x.TWR);
+                    
+                    // 지수 날짜 정렬 매핑
+                    const kospiMap = {};
+                    data.indices.KOSPI200.forEach(x => kospiMap[x.Date] = x.TWR);
+                    const sp500Map = {};
+                    data.indices.SP500.forEach(x => sp500Map[x.Date] = x.TWR);
+
+                    let lastKospiVal = 0.0;
+                    const kospiTwr = dates.map(d => {
+                        if (kospiMap[d] !== undefined) {
+                            lastKospiVal = kospiMap[d];
+                        }
+                        return lastKospiVal;
+                    });
+
+                    let lastSp500Val = 0.0;
+                    const sp500Twr = dates.map(d => {
+                        if (sp500Map[d] !== undefined) {
+                            lastSp500Val = sp500Map[d];
+                        }
+                        return lastSp500Val;
+                    });
+
+                    if (charts.twrIndex) charts.twrIndex.destroy();
+                    const twrIndexCtx = document.getElementById('twrIndexChart').getContext('2d');
+                    charts.twrIndex = new Chart(twrIndexCtx, {
+                        type: 'line',
+                        data: {
+                            labels: dates,
+                            datasets: [
+                                { 
+                                    label: '전체 포트폴리오', 
+                                    data: portfolioTwr, 
+                                    borderColor: '#58a6ff', 
+                                    borderWidth: 1.5, 
+                                    tension: 0.1, 
+                                    fill: false, 
+                                    pointRadius: 0,
+                                    yAxisID: 'y'
+                                },
+                                { 
+                                    label: 'KOSPI 200', 
+                                    data: kospiTwr, 
+                                    borderColor: '#ff7b72', 
+                                    borderDash: [4, 4], 
+                                    borderWidth: 1.5, 
+                                    pointRadius: 0, 
+                                    tension: 0.1,
+                                    yAxisID: 'y'
+                                },
+                                { 
+                                    label: 'S&P 500', 
+                                    data: sp500Twr, 
+                                    borderColor: '#3fb950', 
+                                    borderDash: [4, 4], 
+                                    borderWidth: 1.5, 
+                                    pointRadius: 0, 
+                                    tension: 0.1,
+                                    yAxisID: 'y'
+                                }
+                            ]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            scales: {
+                                x: { ticks: { color: '#8b949e' }, grid: { color: 'rgba(240, 246, 252, 0.05)' } },
+                                y: { 
+                                    type: 'linear',
+                                    display: true,
+                                    position: 'left',
+                                    ticks: { color: '#8b949e' }, 
+                                    grid: { color: 'rgba(240, 246, 252, 0.05)' },
+                                    title: { display: true, text: '수익률 (%)', color: '#8b949e', font: { weight: 'bold', size: 10 } }
+                                }
+                            },
+                            plugins: {
+                                legend: { labels: { color: '#f0f6fc' } }
+                            }
+                        }
+                    });
+
+                    // 3-2. 계좌별 TWR 추이 차트
+                    if (charts.twrAccounts) charts.twrAccounts.destroy();
+                    const accountsList = ['ISA', 'IRP', '연금', '금현물'];
+                    const accountColors = { 'ISA': '#87CEEB', 'IRP': '#1f6feb', '연금': '#238636', '금현물': '#d29922' };
+                    
+                    const datasets = accountsList.map(acc => {
+                        const accData = data.accounts[acc] || [];
+                        const accDates = accData.map(x => x.Date);
+                        const accTwr = accData.map(x => x.TWR);
+                        
+                        return {
+                            label: acc,
+                            data: dates.map(d => {
+                                const idx = accDates.indexOf(d);
+                                return idx !== -1 ? accTwr[idx] : null;
+                            }),
+                            borderColor: accountColors[acc] || '#58a6ff',
+                            borderWidth: 1.5,
+                            tension: 0.1,
+                            pointRadius: 0
+                        };
+                    });
+
+                    const twrAccountsCtx = document.getElementById('twrAccountsChart').getContext('2d');
+                    charts.twrAccounts = new Chart(twrAccountsCtx, {
+                        type: 'line',
+                        data: { labels: dates, datasets: datasets },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            scales: {
+                                x: { ticks: { color: '#8b949e' }, grid: { color: 'rgba(240, 246, 252, 0.05)' } },
+                                y: { ticks: { color: '#8b949e' }, grid: { color: 'rgba(240, 246, 252, 0.05)' } }
+                            },
+                            plugins: {
+                                legend: { labels: { color: '#f0f6fc' } }
+                            }
+                        }
+                    });
+                });
+        }
+
+        // 4. 월별 자산 추이 로드 및 스택 바 차트 시각화
+        function loadMonthlyAssetsData() {
+            return fetch('/api/monthly_assets')
+                .then(res => res.json())
+                .then(data => {
+                    if (data.error) throw new Error(data.error);
+
+                    if (charts.monthlyAssets) charts.monthlyAssets.destroy();
+
+                    // 연한파랑(#87CEEB), 진한파랑(#00008B), 녹색(#228B22), 연두색(#9ACD32)
+                    const colors = {
+                        'ISA': '#87CEEB',
+                        'IRP': '#00008B',
+                        '연금': '#228B22',
+                        '금현물': '#9ACD32'
+                    };
+
+                    const datasets = Object.keys(data.accounts).map(acc => {
+                        return {
+                            label: acc,
+                            data: data.accounts[acc],
+                            backgroundColor: colors[acc] || '#58a6ff',
+                            stack: 'stack1'
+                        };
+                    });
+
+                    const monthlyCtx = document.getElementById('monthlyAssetsChart').getContext('2d');
+                    charts.monthlyAssets = new Chart(monthlyCtx, {
+                        type: 'bar',
+                        data: {
+                            labels: data.dates.map(d => d.slice(0, 7)), // YYYY-MM
+                            datasets: datasets
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            scales: {
+                                x: { stacked: true, ticks: { color: '#8b949e' }, grid: { color: 'rgba(240, 246, 252, 0.05)' } },
+                                y: { stacked: true, ticks: { color: '#8b949e' }, grid: { color: 'rgba(240, 246, 252, 0.05)' } }
+                            },
+                            plugins: {
+                                legend: { labels: { color: '#f0f6fc' } }
+                            }
+                        },
+                        plugins: [topTextPlugin]
+                    });
+                });
+        }
+
+        // 5. 보유 종목 리스트 로드 (드롭다운 구성)
+        function loadHoldingsList() {
+            return fetch('/api/holdings')
+                .then(res => res.json())
+                .then(data => {
+                    if (data.error) throw new Error(data.error);
+
+                    const select = document.getElementById('stock-select');
+                    select.innerHTML = '';
+
+                    let defaultOptionValue = '';
+                    let defaultOptionName = '';
+
+                    data.forEach(item => {
+                        const opt = document.createElement('option');
+                        opt.value = item.code;
+                        opt.text = item.name;
+                        select.appendChild(opt);
+
+                        // 디폴트로 TIGER미국S&P500 우선 선택
+                        if (item.name.includes('S&P500') || item.name.includes('SP500')) {
+                            defaultOptionValue = item.code;
+                            defaultOptionName = item.name;
+                        }
+                    });
+
+                    if (data.length > 0) {
+                        if (defaultOptionValue) {
+                            select.value = defaultOptionValue;
+                        } else {
+                            select.selectedIndex = 0;
+                        }
+                        onStockSelected();
+                    } else {
+                        select.innerHTML = '<option value="">보유 종목 없음</option>';
+                    }
+                });
+        }
+
+        // 6. 종목 선택 시 상세 및 평단가 라인차트 렌더링
+        function onStockSelected() {
+            const select = document.getElementById('stock-select');
+            const code = select.value;
+            const name = select.options[select.selectedIndex].text;
+
+            if (!code) return;
+
+            document.getElementById('stock-avg-cost').innerText = '평단가: 계산 중...';
+            document.getElementById('stock-first-date').innerText = '최초 매수일: 계산 중...';
+
+            fetch(`/api/stock_detail?code=${code}&name=${name}`)
+                .then(res => res.json())
+                .then(data => {
+                    if (data.error) throw new Error(data.error);
+
+                    // 평단가 정보
+                    const avgCostStr = code === 'GOLD' ? `${data.avg_cost.toLocaleString()} 원/g` : `${Math.round(data.avg_cost).toLocaleString()} 원`;
+                    document.getElementById('stock-avg-cost').innerText = `평단가: ${avgCostStr}`;
+                    document.getElementById('stock-first-date').innerText = `최초 매수일: ${data.first_purchase_date || '-'}`;
+
+                    // 차트 데이터 구성
+                    const dates = data.history.map(x => x.Date);
+                    const prices = data.history.map(x => x.Close);
+                    const avgLines = data.history.map(() => data.avg_cost);
+
+                    if (charts.stockDetail) charts.stockDetail.destroy();
+
+                    const stockCtx = document.getElementById('stockDetailChart').getContext('2d');
+                    
+                    const datasets = [
+                        {
+                            label: '종가/가격',
+                            data: prices,
+                            borderColor: '#87CEEB',
+                            borderWidth: 2,
+                            tension: 0.1,
+                            pointRadius: 0
+                        }
+                    ];
+
+                    // 평단가가 유효한 경우 수평 수선 추가
+                    if (data.avg_cost > 0) {
+                        datasets.push({
+                            label: `평단가 (${avgCostStr})`,
+                            data: avgLines,
+                            borderColor: '#f85149',
+                            borderDash: [5, 5],
+                            borderWidth: 1.5,
+                            pointRadius: 0,
+                            fill: false
+                        });
+                    }
+
+                    charts.stockDetail = new Chart(stockCtx, {
+                        type: 'line',
+                        data: {
+                            labels: dates,
+                            datasets: datasets
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            scales: {
+                                x: { ticks: { color: '#8b949e' }, grid: { color: 'rgba(240, 246, 252, 0.05)' } },
+                                y: { ticks: { color: '#8b949e' }, grid: { color: 'rgba(240, 246, 252, 0.05)' } }
+                            },
+                            plugins: {
+                                legend: { labels: { color: '#f0f6fc' } }
+                            }
+                        }
+                    });
+                })
+                .catch(err => {
+                    console.error('Stock detail load failure:', err);
+                    document.getElementById('stock-avg-cost').innerText = '평단가: 계산 실패';
+                });
+        }
+
+        // ==========================================================================
+        // premium Tab Navigation & Smart Budget Dashboard Logic
+        // ==========================================================================
+        let activeTab = 'stock';
+
+        function switchTab(tabName) {
+            activeTab = tabName;
+            
+            // Remove active classes
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+            
+            // Add active class to clicked tab and show content
+            if (tabName === 'stock') {
+                document.getElementById('btn-stock-tab').classList.add('active');
+                document.getElementById('tab-stock').classList.add('active');
+            } else if (tabName === 'budget') {
+                document.getElementById('btn-budget-tab').classList.add('active');
+                document.getElementById('tab-budget').classList.add('active');
+                
+                // Load budget data if not loaded or force reload on switch
+                const monthSelect = document.getElementById('budget-month-select');
+                const selectedMonth = monthSelect ? monthSelect.value : null;
+                loadBudgetData(selectedMonth);
+            }
+        }
+
+        // 가계부 스켈레톤 로딩 상태 노출
+        function showBudgetSkeletons() {
+            const metrics = [
+                { valId: 'budget-income-value', subId: 'budget-income-sub' },
+                { valId: 'budget-expense-value', subId: 'budget-expense-sub' },
+                { valId: 'budget-savings-value', subId: 'budget-savings-sub' },
+                { valId: 'budget-util-value', subId: 'budget-util-sub' }
+            ];
+            metrics.forEach(item => {
+                const valEl = document.getElementById(item.valId);
+                const subEl = document.getElementById(item.subId);
+                if (valEl) {
+                    valEl.innerText = '';
+                    valEl.className = 'card-value skeleton skeleton-value';
+                }
+                if (subEl) {
+                    subEl.innerText = '';
+                    subEl.className = 'card-subtext skeleton skeleton-subtext';
+                }
+            });
+
+            // 대출 의사결정 도우미 초기화
+            const loanIds = ['loan-start-principal', 'loan-current-principal', 'loan-accum-repayment', 'loan-repayment-rate', 'loan-avg-interest-rate', 'loan-spread'];
+            loanIds.forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.innerText = '-';
+            });
+
+            // 고정 지출 레이더 초기화
+            const ratioValEl = document.getElementById('fixed-ratio-val');
+            if (ratioValEl) ratioValEl.innerText = '-';
+            const ratioBarEl = document.getElementById('fixed-ratio-bar');
+            if (ratioBarEl) {
+                ratioBarEl.style.width = '0%';
+                ratioBarEl.style.background = 'var(--text-secondary)';
+            }
+            const ratioStatusEl = document.getElementById('fixed-ratio-status');
+            if (ratioStatusEl) ratioStatusEl.innerText = '고정 지출 데이터를 분석하는 중...';
+            
+            const strictListEl = document.getElementById('strict-fixed-list');
+            if (strictListEl) strictListEl.innerHTML = '<li class="empty-list-msg">데이터 로드 중...</li>';
+            const quasiListEl = document.getElementById('quasi-fixed-list');
+            if (quasiListEl) quasiListEl.innerHTML = '<li class="empty-list-msg">데이터 로드 중...</li>';
+            const totalEl = document.getElementById('fixed-total-amount');
+            if (totalEl) totalEl.innerText = '- 원';
+
+
+            const accountBody = document.getElementById('budget-account-body');
+            if (accountBody) {
+                accountBody.innerHTML = `
+                    <tr>
+                        <td colspan="2"><div class="skeleton skeleton-table" style="height: 150px;"></div></td>
+                    </tr>
+                `;
+            }
+
+            const reportEl = document.getElementById('budget-diagnostic-report');
+            if (reportEl) {
+                reportEl.innerText = '스마트 가계 데이터를 불러와 정밀 분석하는 중입니다... 🔍';
+            }
+            
+            const syncStatusEl = document.getElementById('budget-sync-status');
+            if (syncStatusEl) {
+                syncStatusEl.innerText = '실시간 동기화 중...';
+            }
+        }
+
+        // 가계부 연월 변경 시 호출
+        function onBudgetMonthChanged() {
+            const monthSelect = document.getElementById('budget-month-select');
+            if (monthSelect && monthSelect.value) {
+                loadBudgetData(monthSelect.value);
+            }
+        }
+
+        // 가계부 실시간 데이터 로드 및 렌더링
+        function loadBudgetData(month = null) {
+            showBudgetSkeletons();
+            
+            let url = '/api/budget';
+            if (month) {
+                url += `?month=${month}`;
+            }
+
+            return fetch(url)
+                .then(res => res.json())
+                .then(data => {
+                    if (data.error) throw new Error(data.error);
+
+                    // 1. 연월 선택기 드롭다운 구성 (최초 1회 혹은 사용 가능한 연월 동기화)
+                    const monthSelect = document.getElementById('budget-month-select');
+                    if (monthSelect) {
+                        const currentVal = monthSelect.value;
+                        if (!currentVal || monthSelect.options.length <= 1) {
+                            monthSelect.innerHTML = '';
+                            data.available_months.forEach(m => {
+                                const opt = document.createElement('option');
+                                opt.value = m;
+                                opt.text = m;
+                                monthSelect.appendChild(opt);
+                            });
+                        }
+                        monthSelect.value = data.selected_month;
+                    }
+
+                    // 2. 4개 핵심 지표 카드 바인딩
+                    // 수입
+                    const incEl = document.getElementById('budget-income-value');
+                    if (incEl) {
+                        incEl.innerText = data.summary.total_income.toLocaleString() + ' 원';
+                        incEl.className = 'card-value';
+                    }
+                    const incSub = document.getElementById('budget-income-sub');
+                    if (incSub) {
+                        incSub.innerText = '당월 통장 총 수입 내역';
+                        incSub.className = 'card-subtext neutral';
+                    }
+
+                    // 지출
+                    const expEl = document.getElementById('budget-expense-value');
+                    if (expEl) {
+                        expEl.innerText = data.summary.total_expense.toLocaleString() + ' 원';
+                        expEl.className = 'card-value';
+                    }
+                    const expSub = document.getElementById('budget-expense-sub');
+                    if (expSub) {
+                        expSub.innerText = '당월 실질 소비 누적액';
+                        expSub.className = 'card-subtext neutral';
+                    }
+
+                    // 순저축액
+                    const savEl = document.getElementById('budget-savings-value');
+                    if (savEl) {
+                        savEl.innerText = data.summary.net_savings.toLocaleString() + ' 원';
+                        savEl.className = 'card-value ' + (data.summary.net_savings > 0 ? 'up' : (data.summary.net_savings < 0 ? 'down' : 'neutral'));
+                    }
+                    const savSub = document.getElementById('budget-savings-sub');
+                    if (savSub) {
+                        const rate = data.summary.total_income > 0 ? (data.summary.net_savings / data.summary.total_income * 100).toFixed(1) : 0;
+                        savSub.innerText = `이번 달 실시간 저축률: ${rate}%`;
+                        savSub.className = 'card-subtext ' + (data.summary.net_savings > 0 ? 'up' : (data.summary.net_savings < 0 ? 'down' : 'neutral'));
+                    }
+
+                    // 소진율
+                    const utilEl = document.getElementById('budget-util-value');
+                    if (utilEl) {
+                        utilEl.innerText = data.summary.utilization_rate + ' %';
+                        utilEl.className = 'card-value ' + (data.summary.utilization_rate > 100 ? 'down' : (data.summary.utilization_rate > 85 ? 'neutral' : 'up'));
+                    }
+                    const utilSub = document.getElementById('budget-util-sub');
+                    if (utilSub) {
+                        utilSub.innerText = '목표 예산 대비 사용율';
+                        utilSub.className = 'card-subtext ' + (data.summary.utilization_rate > 100 ? 'down' : (data.summary.utilization_rate > 85 ? 'neutral' : 'up'));
+                    }
+
+                    // 3. 저축·투자 & 대출 의사결정 도우미
+                    window.loanHelper = data.loan_helper;
+                    if (typeof updateLoanHelperUI === 'function') {
+                        updateLoanHelperUI();
+                    }
+
+                    // 3-2. 고정 지출 레이더 렌더링
+                    const radarData = data.fixed_expenses_radar;
+                    if (radarData) {
+                        // 게이지바 및 비율 텍스트
+                        const ratioValEl = document.getElementById('fixed-ratio-val');
+                        if (ratioValEl) ratioValEl.innerText = `${radarData.fixed_ratio}%`;
+                        
+                        const ratioBarEl = document.getElementById('fixed-ratio-bar');
+                        if (ratioBarEl) {
+                            ratioBarEl.style.width = `${Math.min(radarData.fixed_ratio, 100)}%`;
+                            if (radarData.fixed_ratio < 50) {
+                                ratioBarEl.style.background = 'linear-gradient(90deg, #3fb950 0%, #56e3b8 100%)';
+                            } else if (radarData.fixed_ratio <= 60) {
+                                ratioBarEl.style.background = 'linear-gradient(90deg, #d29922 0%, #ff9e3b 100%)';
+                            } else {
+                                ratioBarEl.style.background = 'linear-gradient(90deg, #f85149 0%, #ff7b72 100%)';
+                            }
+                        }
+                        
+                        const ratioStatusEl = document.getElementById('fixed-ratio-status');
+                        if (ratioStatusEl) {
+                            if (radarData.fixed_ratio < 50) {
+                                ratioStatusEl.innerHTML = '🟢 <span style="color: var(--accent-green)">수입 대비 고정 지출이 안전 범주에서 안정적으로 관리되고 있습니다. (최적 상태)</span>';
+                            } else if (radarData.fixed_ratio <= 60) {
+                                ratioStatusEl.innerHTML = '🟡 <span style="color: var(--accent-yellow)">고정 지출 비중이 소폭 상승한 경계 단계입니다. 비필수적인 고정 구독료를 점검하세요.</span>';
+                            } else {
+                                ratioStatusEl.innerHTML = '🔴 <span style="color: var(--accent-red)">수입의 60% 이상이 고정비로 미리 나가고 있어 지출 통제 및 고정비 다이어트가 강력히 요구됩니다.</span>';
+                            }
+                        }
+                        
+                        // 정기 완전 고정비 목록
+                        const strictListEl = document.getElementById('strict-fixed-list');
+                        if (strictListEl) {
+                            strictListEl.innerHTML = '';
+                            if (radarData.strict_fixed_items.length === 0) {
+                                strictListEl.innerHTML = '<li class="empty-list-msg">감지된 정기 완전 고정비가 없습니다.</li>';
+                            } else {
+                                radarData.strict_fixed_items.forEach(item => {
+                                    const li = document.createElement('li');
+                                    li.className = 'fixed-item';
+                                    li.innerHTML = `
+                                        <div class="fixed-item-left">
+                                            <span class="fixed-item-name">${item.name}</span>
+                                            <span class="fixed-item-cat">${item.category}</span>
+                                        </div>
+                                        <div class="fixed-item-right">
+                                            <span class="fixed-item-amt">${item.avg_amount.toLocaleString()}원</span>
+                                            <span class="fixed-item-freq">${item.frequency}</span>
+                                        </div>
+                                    `;
+                                    strictListEl.appendChild(li);
+                                });
+                            }
+                        }
+                        
+                        // 유사 고정비 목록
+                        const quasiListEl = document.getElementById('quasi-fixed-list');
+                        if (quasiListEl) {
+                            quasiListEl.innerHTML = '';
+                            if (radarData.quasi_fixed_items.length === 0) {
+                                quasiListEl.innerHTML = '<li class="empty-list-msg">감지된 유사 고정비가 없습니다.</li>';
+                            } else {
+                                radarData.quasi_fixed_items.forEach(item => {
+                                    const li = document.createElement('li');
+                                    li.className = 'fixed-item';
+                                    li.innerHTML = `
+                                        <div class="fixed-item-left">
+                                            <span class="fixed-item-name">${item.name}</span>
+                                            <span class="fixed-item-cat">${item.category}</span>
+                                        </div>
+                                        <div class="fixed-item-right">
+                                            <span class="fixed-item-amt">${item.avg_amount.toLocaleString()}원</span>
+                                            <span class="fixed-item-freq">${item.frequency}</span>
+                                        </div>
+                                    `;
+                                    quasiListEl.appendChild(li);
+                                });
+                            }
+                        }
+                        
+                        // 합계 배너
+                        const totalEl = document.getElementById('fixed-total-amount');
+                        if (totalEl) totalEl.innerText = `${radarData.total_fixed_amount.toLocaleString()} 원`;
+                    }
+
+                    // 5. 현재기준 통장 잔액 테이블 렌더링
+                    const accountBody = document.getElementById('budget-account-body');
+                    if (accountBody) {
+                        accountBody.innerHTML = '';
+                        data.account_balances.forEach(item => {
+                            const tr = document.createElement('tr');
+                            tr.innerHTML = `
+                                <td class="bold-cat">${item.account_name}</td>
+                                <td class="num-align">${item.balance.toLocaleString()} 원</td>
+                            `;
+                            accountBody.appendChild(tr);
+                        });
+                    }
+
+                    // 6. Antigravity 스마트 가계 정밀 진단 리포트 바인딩
+                    document.getElementById('budget-diagnostic-report').innerText = data.diagnostic_report;
+
+                    // 7. 차트 시각화
+                    // 7-1. 대분류별 소비 비중 (도넛 차트)
+                    if (charts.budgetCategory) charts.budgetCategory.destroy();
+                    const catLabels = data.category_comparison.filter(x => x.actual > 0).map(x => x.category_name);
+                    const catData = data.category_comparison.filter(x => x.actual > 0).map(x => x.actual);
+                    
+                    const budgetCatCtx = document.getElementById('budgetCategoryChart').getContext('2d');
+                    charts.budgetCategory = new Chart(budgetCatCtx, {
+                        type: 'doughnut',
+                        data: {
+                            labels: catLabels,
+                            datasets: [{
+                                data: catData,
+                                backgroundColor: vibrantColors,
+                                borderWidth: 1,
+                                borderColor: '#0d1117'
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            layout: {
+                                padding: {
+                                    left: 75,
+                                    right: 75,
+                                    top: 35,
+                                    bottom: 35
+                                }
+                            },
+                            plugins: {
+                                legend: { display: false }
+                            }
+                        },
+                        plugins: [donutLabelsPlugin]
+                    });
+ 
+                    // 7-2. 이번 달 지출 TOP 8 소분류 비중 (도넛 차트)
+                    if (charts.budgetTopSubcat) charts.budgetTopSubcat.destroy();
+                    const subcatCtx = document.getElementById('budgetTopSubcatChart').getContext('2d');
+                    charts.budgetTopSubcat = new Chart(subcatCtx, {
+                        type: 'doughnut',
+                        data: {
+                            labels: data.top_8_subcats.map(x => x.subcat_name),
+                            datasets: [{
+                                data: data.top_8_subcats.map(x => x.actual),
+                                backgroundColor: vibrantColors,
+                                borderWidth: 1,
+                                borderColor: '#0d1117'
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            layout: {
+                                padding: {
+                                    left: 75,
+                                    right: 75,
+                                    top: 35,
+                                    bottom: 35
+                                }
+                            },
+                            plugins: {
+                                legend: { display: false }
+                            }
+                        },
+                        plugins: [donutLabelsPlugin]
+                    });
+ 
+                    // 7-3. 카테고리별 예산 대비 실지출 (그룹 바 차트)
+                    if (charts.budgetvsActual) charts.budgetvsActual.destroy();
+                    const vsActualCtx = document.getElementById('budgetBudgetvsActualChart').getContext('2d');
+                    charts.budgetvsActual = new Chart(vsActualCtx, {
+                        type: 'bar',
+                        data: {
+                            labels: data.category_comparison.map(x => x.category_name),
+                            datasets: [
+                                {
+                                    label: '목표 예산',
+                                    data: data.category_comparison.map(x => x.budget),
+                                    backgroundColor: 'rgba(88, 166, 255, 0.3)',
+                                    borderColor: 'rgba(88, 166, 255, 0.6)',
+                                    borderWidth: 1
+                                },
+                                {
+                                    label: '실제 지출',
+                                    data: data.category_comparison.map(x => x.actual),
+                                    backgroundColor: '#58a6ff',
+                                    borderColor: '#58a6ff',
+                                    borderWidth: 1
+                                }
+                            ]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            scales: {
+                                x: { ticks: { color: '#8b949e' }, grid: { color: 'rgba(240, 246, 252, 0.05)' } },
+                                y: { ticks: { color: '#8b949e' }, grid: { color: 'rgba(240, 246, 252, 0.05)' } }
+                            },
+                            plugins: {
+                                legend: { labels: { color: '#f0f6fc' } }
+                            }
+                        }
+                    });
+ 
+                    // 7-4. 신용카드사별 이번 달 사용 랭킹 (지출 많은 순 정렬 - 수평 누적 바 차트 & 실적 점선 & 투톤 컬러)
+                    if (charts.budgetCardRank) charts.budgetCardRank.destroy();
+                    const cardRankCtx = document.getElementById('budgetCardRankChart').getContext('2d');
+                    
+                    const cardLabels = data.card_comparison.map(x => x.card_name);
+                    const dataset0Data = [];
+                    const dataset1Data = [];
+                    const dataset0Colors = [];
+                    
+                    data.card_comparison.forEach(item => {
+                        const threshold = item.card_name.includes('하나HD') ? 200000 : 300000;
+                        const actual = item.actual;
+                        
+                        if (actual >= threshold) {
+                            dataset0Data.push(threshold);
+                            dataset1Data.push(actual - threshold);
+                            dataset0Colors.push('#3fb950'); // 실적 충족 시 기본 영역 초록색
+                        } else {
+                            dataset0Data.push(actual);
+                            dataset1Data.push(0);
+                            dataset0Colors.push('#ff7b72'); // 실적 미달 시 주황/붉은색
+                        }
+                    });
+ 
+                    charts.budgetCardRank = new Chart(cardRankCtx, {
+                        type: 'bar',
+                        data: {
+                            labels: cardLabels,
+                            datasets: [
+                                {
+                                    label: '실적 충족/미달 금액',
+                                    data: dataset0Data,
+                                    backgroundColor: dataset0Colors,
+                                    borderWidth: 1
+                                },
+                                {
+                                    label: '실적 초과 금액',
+                                    data: dataset1Data,
+                                    backgroundColor: '#58a6ff', // 실적 초과 부분은 파란색으로 표시
+                                    borderWidth: 1
+                                }
+                            ]
+                        },
+                        options: {
+                            indexAxis: 'y', // 수평 바 차트로 설정
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            scales: {
+                                x: { 
+                                    stacked: true,
+                                    ticks: { color: '#8b949e' }, 
+                                    grid: { color: 'rgba(240, 246, 252, 0.05)' } 
+                                },
+                                y: { 
+                                    stacked: true,
+                                    ticks: { color: '#8b949e' }, 
+                                    grid: { color: 'rgba(240, 246, 252, 0.05)' } 
+                                }
+                            },
+                            plugins: {
+                                legend: { display: false }
+                            }
+                        },
+                        plugins: [cardThresholdPlugin]
+                    });
+
+                    const now = new Date();
+                    document.getElementById('budget-sync-status').innerText = '최근 동기화: ' + now.toLocaleTimeString();
+                })
+                .catch(err => {
+                    console.error('Budget dashboard load failure:', err);
+                    document.getElementById('budget-sync-status').innerText = '동기화 실패 🚨';
+                });
+        }
+
+        // 전체 데이터 리프레시 통합 (주식 & 가계부 동시 동기화)
+        function refreshAllData() {
+            showAllSkeletons();
+            showBudgetSkeletons();
+            
+            const monthSelect = document.getElementById('budget-month-select');
+            const selectedMonth = monthSelect ? monthSelect.value : null;
+            
+            Promise.all([
+                loadOverviewData().catch(err => { console.error('Overview load fail:', err); return null; }),
+                loadAllocationData().catch(err => { console.error('Allocation load fail:', err); return null; }),
+                loadTwrData().catch(err => { console.error('TWR load fail:', err); return null; }),
+                loadMonthlyAssetsData().catch(err => { console.error('Monthly load fail:', err); return null; }),
+                loadHoldingsList().catch(err => { console.error('Holdings load fail:', err); return null; }),
+                loadBudgetData(selectedMonth).catch(err => { console.error('Budget load fail:', err); return null; })
+            ])
+            .then(() => {
+                const now = new Date();
+                document.getElementById('data-status').innerText = '최근 동기화: ' + now.toLocaleTimeString();
+            });
+        }
+        window.addEventListener('DOMContentLoaded', refreshAllData);
+    </script>
+</body>
+</html>
