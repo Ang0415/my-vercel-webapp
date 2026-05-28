@@ -1,13 +1,3 @@
-streamlit
 pandas
-numpy
 gspread
 oauth2client
-plotly
-finance-datareader
-holidays
-python-telegram-bot
-PyYAML
-requests
-yfinance
-lxml
