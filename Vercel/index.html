@@ -219,12 +219,20 @@
                             <div class="helper-stat-value" id="loan-start-principal">-</div>
                         </div>
                         <div class="helper-stat-item">
-                            <div class="helper-stat-label">누적 추가 상환액</div>
+                            <div class="helper-stat-label">현재 대출 잔액</div>
+                            <div class="helper-stat-value" id="loan-current-principal">-</div>
+                        </div>
+                        <div class="helper-stat-item">
+                            <div class="helper-stat-label">누적 상환원금</div>
                             <div class="helper-stat-value" id="loan-accum-repayment">-</div>
                         </div>
                         <div class="helper-stat-item">
                             <div class="helper-stat-label">대출 현재 상환율</div>
                             <div class="helper-stat-value" id="loan-repayment-rate">-</div>
+                        </div>
+                        <div class="helper-stat-item">
+                            <div class="helper-stat-label">가중평균 대출금리</div>
+                            <div class="helper-stat-value" id="loan-avg-interest-rate">-</div>
                         </div>
                         <div class="helper-stat-item">
                             <div class="helper-stat-label">투자 - 대출 스프레드</div>
@@ -678,6 +686,40 @@
             if (statusEl) statusEl.innerText = '실시간 데이터 불러오는 중...';
         }
 
+        // 대출 의사결정 도우미 화면 업데이트 함수 (실시간 포트폴리오 수익률 및 실시간 대출금리/잔액 연동)
+        function updateLoanHelperUI() {
+            if (!window.loanHelper) return;
+            
+            const startPrincipal = window.loanHelper.start_principal;
+            const currentPrincipal = window.loanHelper.current_principal || 0;
+            const repayment = window.loanHelper.repayment;
+            const repaymentRate = window.loanHelper.repayment_rate;
+            const loanInterestRate = window.loanHelper.loan_interest_rate || 3.8;
+            
+            const pStartEl = document.getElementById('loan-start-principal');
+            const pCurrentEl = document.getElementById('loan-current-principal');
+            const pAccumEl = document.getElementById('loan-accum-repayment');
+            const rateEl = document.getElementById('loan-repayment-rate');
+            const interestEl = document.getElementById('loan-avg-interest-rate');
+            const spreadEl = document.getElementById('loan-spread');
+            
+            if (pStartEl) pStartEl.innerText = startPrincipal.toLocaleString() + ' 원';
+            if (pCurrentEl) pCurrentEl.innerText = currentPrincipal.toLocaleString() + ' 원';
+            if (pAccumEl) pAccumEl.innerText = repayment.toLocaleString() + ' 원';
+            if (rateEl) rateEl.innerText = repaymentRate.toFixed(1) + ' %';
+            if (interestEl) interestEl.innerText = '연 ' + loanInterestRate.toFixed(2) + '%';
+            
+            // Calculate spread dynamically using portfolio expected return, fallback to 5.0%
+            const portfolioReturn = window.expectedAnnualReturn !== undefined ? window.expectedAnnualReturn : 5.0;
+            const spread = portfolioReturn - loanInterestRate;
+            
+            if (spreadEl) {
+                const spreadStr = (spread >= 0 ? '+' : '') + spread.toFixed(2) + '%';
+                spreadEl.innerText = spreadStr;
+                spreadEl.className = 'helper-stat-value ' + (spread > 0 ? 'up' : (spread < 0 ? 'down' : 'neutral'));
+            }
+        }
+
         // 1. 대시보드 상단 개요 데이터 로드
         function loadOverviewData() {
             return fetch('/api/overview')
@@ -747,6 +789,7 @@
                     // 기대수익률 및 연도별 수익률 카드 바인딩
                     try {
                         if (data.expected_annual_return !== undefined) {
+                            window.expectedAnnualReturn = data.expected_annual_return;
                             const eVal = document.getElementById('expected-value');
                             const eSub = document.getElementById('expected-sub');
                             if (eVal) {
@@ -756,6 +799,10 @@
                             if (eSub) {
                                 eSub.innerText = '포트폴리오 연평균 기대치';
                                 eSub.className = 'card-subtext neutral';
+                            }
+                            // 대출 의사결정 도우미 화면 업데이트
+                            if (typeof updateLoanHelperUI === 'function') {
+                                updateLoanHelperUI();
                             }
                         }
                     } catch (e) { console.error('Expected yield binding error:', e); }
@@ -1253,6 +1300,13 @@
                 }
             });
 
+            // 대출 의사결정 도우미 초기화
+            const loanIds = ['loan-start-principal', 'loan-current-principal', 'loan-accum-repayment', 'loan-repayment-rate', 'loan-avg-interest-rate', 'loan-spread'];
+            loanIds.forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.innerText = '-';
+            });
+
             // 고정 지출 레이더 초기화
             const ratioValEl = document.getElementById('fixed-ratio-val');
             if (ratioValEl) ratioValEl.innerText = '-';
@@ -1381,14 +1435,10 @@
                     }
 
                     // 3. 저축·투자 & 대출 의사결정 도우미
-                    document.getElementById('loan-start-principal').innerText = data.loan_helper.start_principal.toLocaleString() + ' 원';
-                    document.getElementById('loan-accum-repayment').innerText = data.loan_helper.repayment.toLocaleString() + ' 원';
-                    document.getElementById('loan-repayment-rate').innerText = data.loan_helper.repayment_rate + ' %';
-                    
-                    const spreadEl = document.getElementById('loan-spread');
-                    spreadEl.innerText = data.loan_helper.spread_str;
-                    const spreadVal = parseFloat(data.loan_helper.spread_str);
-                    spreadEl.className = 'helper-stat-value ' + (spreadVal > 0 ? 'up' : (spreadVal < 0 ? 'down' : 'neutral'));
+                    window.loanHelper = data.loan_helper;
+                    if (typeof updateLoanHelperUI === 'function') {
+                        updateLoanHelperUI();
+                    }
 
                     // 3-2. 고정 지출 레이더 렌더링
                     const radarData = data.fixed_expenses_radar;

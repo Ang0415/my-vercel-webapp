@@ -207,23 +207,60 @@ class handler(BaseHTTPRequestHandler):
             top_8_subcats = top_subcats[:8]
             
             # 12. 저축·투자 & 대출 의사결정 도우미
-            # 대출 시작 총원금: 예산 및 설정 K열에서 대출 항목 3개 합계 계산
-            # Row 2: 보금자리론 354,610,612, Row 3: 주택담보대출 49,278,892, Row 4: 회사대출 85,000,000 = 총 488,889,504
+            # 대출 시작 총원금: 2026.01.01 기준 baseline 시작 원금
             loan_start_principal = 488889504
             
-            # 누적 추가 상환액 계산 (거래내역 전체에서 소분류가 '대출원금상환'인 지출 누적)
-            total_repayment = 0
+            # 구글시트 '예산 및 설정' J~L열에서 실시간 대출 잔액 및 금리 정보 추출
+            total_current_loan_balance = 0
+            weighted_loan_interest_rate_sum = 0.0
+            
+            for row in settings_rows[1:]:
+                if len(row) > 11:
+                    loan_name = row[9].strip()
+                    loan_bal_str = row[10].strip()
+                    loan_rate_str = row[11].strip()
+                    
+                    # '항목' 헤더 및 합계 행 등을 제외하고 유효한 대출 항목만 선별
+                    if loan_name and loan_name != '항목' and loan_bal_str:
+                        curr_bal = clean_numeric_value(loan_bal_str, int)
+                        if curr_bal > 0:
+                            total_current_loan_balance += curr_bal
+                            
+                            # 금리 문자열에서 숫자 부분 추출 (예: '4.25%(고정)' -> 4.25)
+                            rate_match = re.search(r'([\d.]+)', loan_rate_str)
+                            loan_rate = float(rate_match.group(1)) if rate_match else 0.0
+                            weighted_loan_interest_rate_sum += curr_bal * loan_rate
+            
+            # 가중평균 대출금리 산정 (대출이 없는 경우 기본값 3.8% 적용)
+            if total_current_loan_balance > 0:
+                loan_interest_rate = weighted_loan_interest_rate_sum / total_current_loan_balance
+            else:
+                loan_interest_rate = 3.8
+                
+            # 누적 상환원금 = 대출 시작 총원금 - 현재 대출 잔액
+            # 만약 현재 잔액이 시작 원금보다 큰 경우(추가 대출 발생 등), 0원 이하로 떨어지지 않도록 방어 코드 적용
+            total_repayment = loan_start_principal - total_current_loan_balance
+            if total_repayment < 0:
+                total_repayment = 0
+                
+            # 추가 대출 상환 거래내역도 보완적으로 반영 (만약 있다면 합산)
+            tx_repayment = 0
             for r in tx_records:
                 sub_cat = r.get('소분류', '').strip()
                 exp_val = abs(clean_numeric_value(r.get('지출', '0'), int))
                 if sub_cat == '대출원금상환' and exp_val > 0:
-                    total_repayment += exp_val
-            
+                    tx_repayment += exp_val
+                    
+            # total_repayment이 0 이하이거나, 거래내역 상환액이 더 많은 경우 보완
+            if tx_repayment > total_repayment:
+                total_repayment = tx_repayment
+                
             loan_repayment_rate = (total_repayment / loan_start_principal * 100) if loan_start_principal > 0 else 0.0
             
-            loan_interest_rate = 3.8  # 평균 대출금리 3.8%
-            investment_return_rate = 5.0  # 기대 투자수익률 5.0%
-            spread = investment_return_rate - loan_interest_rate # 1.2%
+            loan_interest_rate = round(loan_interest_rate, 2)
+            investment_return_rate = 5.0  # 기대 투자수익률 5.0% (프론트엔드 연동 전 fallback)
+            spread = investment_return_rate - loan_interest_rate
+
             
             # 13. [순수 여유 현금 잔액 연산 - 주식 대시보드 실시간 연동용]
             # 현금 계좌 잔액 합계 - 카드 누적 지출 잔액 합계
@@ -425,8 +462,10 @@ class handler(BaseHTTPRequestHandler):
                 },
                 "loan_helper": {
                     "start_principal": loan_start_principal,
+                    "current_principal": total_current_loan_balance,
                     "repayment": total_repayment,
                     "repayment_rate": round(loan_repayment_rate, 1),
+                    "loan_interest_rate": round(loan_interest_rate, 2),
                     "spread_str": f"+{spread:.1f}%" if spread >= 0 else f"{spread:.1f}%"
                 },
                 "category_comparison": category_comparison,
