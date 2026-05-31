@@ -355,11 +355,12 @@ class handler(BaseHTTPRequestHandler):
                         norm_desc = re.sub(r'\[.*?\]', '', norm_desc)
                         norm_desc = re.sub(r'-\d+', '', norm_desc)
                         norm_desc = re.sub(r'\d+건', '', norm_desc)
+                        norm_desc = re.sub(r'\d+월', '', norm_desc)
                         norm_desc = re.sub(r'\s+', '', norm_desc).strip()
                         
                         # 고정비 성격이 있는 주요 소분류는 내용(norm_desc)까지 묶어 상세 매핑
                         # 그 외 일반 지출은 소분류 단위로만 묶어서 정기 유사고정비 판정
-                        if sub_cat in ['대출이자/원금', '보험', '주거비', '통신비', '구독료', '공과금', '콘텐츠']:
+                        if sub_cat in ['대출이자/원금', '보험', '주거비', '통신비', '구독료', '공과금', '콘텐츠', '관리비']:
                             group_key = (main_cat, sub_cat, norm_desc)
                         else:
                             group_key = (main_cat, sub_cat, "")
@@ -395,7 +396,7 @@ class handler(BaseHTTPRequestHandler):
                 min_val = min(monthly_totals)
                 is_stable = (max_val - min_val) <= (avg_active_amount * 0.15) if avg_active_amount > 0 else True
                 
-                is_strict_subcat = sub_cat in ['대출이자/원금', '보험', '주거비', '통신비', '구독료', '콘텐츠']
+                is_strict_subcat = sub_cat in ['대출이자/원금', '보험', '주거비', '통신비', '구독료', '콘텐츠', '관리비', '공과금'] or '관리비' in norm_desc or '관리비' in sub_cat
                 
                 # 표시용 한글 정돈
                 display_name = norm_desc if norm_desc else sub_cat
@@ -407,9 +408,18 @@ class handler(BaseHTTPRequestHandler):
                 elif display_name == '대출이자/원금':
                     display_name = '대출 이자 및 원금'
                     
-                # 6개월 중 최소 4개월 이상 발생 시 정기성 고정비로 판정
-                if months_active >= 4:
-                    if is_strict_subcat or is_stable:
+                # 엄격한 고정비(관리비 등)는 횟수 무관하게 무조건 편입 (최소 1번 이상 발생했으므로)
+                if is_strict_subcat:
+                    strict_fixed_items.append({
+                        "name": display_name,
+                        "category": sub_cat,
+                        "avg_amount": int(avg_active_amount),
+                        "frequency": f"매월 {int(freq_pct)}% 발생" if freq_pct < 100 else "매월 100% 발생"
+                    })
+                    total_fixed_amount += int(avg_active_amount)
+                # 그 외의 일반 유사 고정비는 6개월 중 최소 4개월 이상 발생 시 정기성 고정비로 판정
+                elif months_active >= 4:
+                    if is_stable:
                         strict_fixed_items.append({
                             "name": display_name,
                             "category": sub_cat,
