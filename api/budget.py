@@ -408,18 +408,9 @@ class handler(BaseHTTPRequestHandler):
                 elif display_name == '대출이자/원금':
                     display_name = '대출 이자 및 원금'
                     
-                # 엄격한 고정비(관리비 등)는 횟수 무관하게 무조건 편입 (최소 1번 이상 발생했으므로)
-                if is_strict_subcat:
-                    strict_fixed_items.append({
-                        "name": display_name,
-                        "category": sub_cat,
-                        "avg_amount": int(avg_active_amount),
-                        "frequency": f"매월 {int(freq_pct)}% 발생" if freq_pct < 100 else "매월 100% 발생"
-                    })
-                    total_fixed_amount += int(avg_active_amount)
-                # 그 외의 일반 유사 고정비는 6개월 중 최소 4개월 이상 발생 시 정기성 고정비로 판정
-                elif months_active >= 4:
-                    if is_stable:
+                # 사용자 요청: 6개월 중 최소 3개월 이상 발생 시 정기성 고정비로 판정 (잡다한 내역 방지)
+                if months_active >= 3:
+                    if is_strict_subcat or is_stable:
                         strict_fixed_items.append({
                             "name": display_name,
                             "category": sub_cat,
