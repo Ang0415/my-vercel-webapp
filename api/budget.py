@@ -358,6 +358,11 @@ class handler(BaseHTTPRequestHandler):
                         norm_desc = re.sub(r'\d+월', '', norm_desc)
                         norm_desc = re.sub(r'\s+', '', norm_desc).strip()
                         
+                        # 사용자 맞춤형 예외 정규화 (정소현 보험 항목 불일치 방지 및 소분류 교정)
+                        if '정소현' in desc and '보험' in desc:
+                            sub_cat = '보험'
+                            norm_desc = '정소현보험'
+                        
                         # 고정비 성격이 있는 주요 소분류는 내용(norm_desc)까지 묶어 상세 매핑
                         # 그 외 일반 지출은 소분류 단위로만 묶어서 정기 유사고정비 판정
                         if sub_cat in ['대출이자/원금', '보험', '주거비', '통신비', '구독료', '공과금', '콘텐츠', '관리비']:
@@ -408,7 +413,7 @@ class handler(BaseHTTPRequestHandler):
                 elif display_name == '대출이자/원금':
                     display_name = '대출 이자 및 원금'
                     
-                # 사용자 요청: 6개월 중 최소 3개월 이상 발생 시 정기성 고정비로 판정 (잡다한 내역 방지)
+                # 6개월 중 최소 3개월 이상 발생 시 정기성 고정비로 판정
                 if months_active >= 3:
                     if is_strict_subcat or is_stable:
                         strict_fixed_items.append({
