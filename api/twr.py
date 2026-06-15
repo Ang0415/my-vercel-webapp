@@ -92,6 +92,64 @@ def safe_get_all_records(ws):
         records.append(record)
     return records
 
+def calculate_mwr_history(gc):
+    try:
+        # Load Total Valuation
+        sh_asset = gc.open('성과_자산추이_Raw')
+        ws_asset = sh_asset.worksheet('Total')
+        records_asset = safe_get_all_records(ws_asset)
+        
+        # Load Total Profit
+        sh_profit = gc.open('성과_손익_Raw')
+        ws_profit = sh_profit.worksheet('Total')
+        records_profit = safe_get_all_records(ws_profit)
+        
+        # Build maps
+        val_map = {}
+        for r in records_asset:
+            d = str(r.get('Date', r.get('date', ''))).strip()
+            val = clean_numeric_value(r.get('Value', r.get('value', 0)), float)
+            if d:
+                val_map[d] = val
+                
+        profit_map = {}
+        for r in records_profit:
+            d = str(r.get('날짜', r.get('Date', ''))).strip()
+            # robust date parse
+            cleaned_d = re.sub(r'[^\d]', '-', d.strip())
+            cleaned_d = re.sub(r'-+', '-', cleaned_d).strip('-')
+            parts = cleaned_d.split('-')
+            if len(parts) >= 3:
+                try:
+                    d_formatted = f"{int(parts[0]):04d}-{int(parts[1]):02d}-{int(parts[2]):02d}"
+                    prof = clean_numeric_value(r.get('단순손익', r.get('Profit', 0)), float)
+                    profit_map[d_formatted] = prof
+                except ValueError:
+                    pass
+                
+        # Calculate MWR for each Date in Total TWR
+        mwr_history = []
+        # Get sorted list of dates
+        all_dates = sorted(list(set(list(val_map.keys()) + list(profit_map.keys()))))
+        for d in all_dates:
+            val = val_map.get(d, 0.0)
+            prof = profit_map.get(d, 0.0)
+            denom = val - prof
+            if abs(denom) > 1e-9:
+                mwr = (prof / denom) * 100.0
+            else:
+                mwr = 0.0
+            mwr_history.append({
+                "Date": d,
+                "MWR": round(mwr, 2)
+            })
+            
+        mwr_history.sort(key=lambda x: x['Date'])
+        return mwr_history
+    except Exception as e:
+        print(f"Error calculating MWR: {e}")
+        return []
+
 class handler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
@@ -173,9 +231,17 @@ class handler(BaseHTTPRequestHandler):
                 indices_data["KOSPI200"] = []
                 indices_data["SP500"] = []
                 
+            # 3. 역사적 금액가중수익률(MWR) 계산 및 공통 날짜 슬라이싱 적용
+            mwr_data = calculate_mwr_history(gc)
+            if last_date:
+                mwr_data = [x for x in mwr_data if x['Date'] <= last_date]
+                if 'Total' in accounts_data:
+                    accounts_data['Total'] = [x for x in accounts_data['Total'] if x['Date'] <= last_date]
+                
             response_data = {
                 "accounts": accounts_data,
-                "indices": indices_data
+                "indices": indices_data,
+                "mwr": mwr_data
             }
             
             self.wfile.write(json.dumps(response_data).encode('utf-8'))

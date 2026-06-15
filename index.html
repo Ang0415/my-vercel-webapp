@@ -129,11 +129,18 @@
                                 <canvas id="twrIndexChart"></canvas>
                             </div>
                         </div>
-                        <div>
+                        <div style="margin-bottom: 24px;">
                             <h4 style="margin-bottom: 12px; color: var(--text-secondary); text-align: center;">계좌별 TWR 추이</h4>
                             <div class="chart-container">
                                 <canvas id="twrAccountsChart"></canvas>
                             </div>
+                        </div>
+                        <div>
+                            <h4 id="twrMwrChartTitle" style="margin-bottom: 12px; color: var(--text-secondary); text-align: center;">전체 포트폴리오 TWR vs MWR 추이 (행동 갭 분석)</h4>
+                            <div class="chart-container">
+                                <canvas id="twrMwrChart"></canvas>
+                            </div>
+                            <div id="twrMwrFeedback" style="margin-top: 16px; padding: 12px 16px; border-radius: 8px; text-align: center; font-size: 14px; display: none; font-weight: bold; background: rgba(56, 139, 253, 0.1); border: 1px solid rgba(56, 139, 253, 0.2); color: #58a6ff;"></div>
                         </div>
                     </div>
                 </div>
@@ -1165,6 +1172,106 @@
                             }
                         }
                     });
+
+                    // 3-3. TWR vs MWR (행동 갭 분석) 차트
+                    if (charts.twrMwr) charts.twrMwr.destroy();
+                    
+                    // MWR 데이터 매핑
+                    const mwrMap = {};
+                    if (data.mwr) {
+                        data.mwr.forEach(x => mwrMap[x.Date] = x.MWR);
+                    }
+                    const portfolioMwr = dates.map(d => {
+                        return mwrMap[d] !== undefined ? mwrMap[d] : null;
+                    });
+
+                    const twrMwrCtx = document.getElementById('twrMwrChart').getContext('2d');
+                    charts.twrMwr = new Chart(twrMwrCtx, {
+                        type: 'line',
+                        data: {
+                            labels: dates,
+                            datasets: [
+                                {
+                                    label: '시간가중수익률 (TWR - 포트폴리오 성과)',
+                                    data: portfolioTwr,
+                                    borderColor: '#58a6ff', // 밝은 파랑
+                                    backgroundColor: 'rgba(88, 166, 255, 0.1)',
+                                    borderWidth: 1.8,
+                                    tension: 0.1,
+                                    pointRadius: 0,
+                                    fill: false
+                                },
+                                {
+                                    label: '금액가중수익률 (MWR - 실제 투자 수익률)',
+                                    data: portfolioMwr,
+                                    borderColor: '#d29922', // 금색/주황색
+                                    backgroundColor: 'rgba(210, 153, 34, 0.1)',
+                                    borderWidth: 1.8,
+                                    tension: 0.1,
+                                    pointRadius: 0,
+                                    fill: false
+                                }
+                            ]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            scales: {
+                                x: { ticks: { color: '#8b949e' }, grid: { color: 'rgba(240, 246, 252, 0.05)' } },
+                                y: { 
+                                    ticks: { color: '#8b949e' }, 
+                                    grid: { color: 'rgba(240, 246, 252, 0.05)' },
+                                    title: { display: true, text: '수익률 (%)', color: '#8b949e', font: { weight: 'bold', size: 10 } }
+                                }
+                            },
+                            plugins: {
+                                legend: { labels: { color: '#f0f6fc' } }
+                            }
+                        }
+                    });
+
+                    // 최신 데이터 가져와서 알파(Gap) 계산 및 설명 업데이트
+                    if (portfolioTwr.length > 0 && portfolioMwr.length > 0) {
+                        let latestTwr = null;
+                        let latestMwr = null;
+                        for (let i = portfolioTwr.length - 1; i >= 0; i--) {
+                            if (portfolioTwr[i] !== null && portfolioTwr[i] !== undefined) {
+                                latestTwr = portfolioTwr[i];
+                                break;
+                            }
+                        }
+                        for (let i = portfolioMwr.length - 1; i >= 0; i--) {
+                            if (portfolioMwr[i] !== null && portfolioMwr[i] !== undefined) {
+                                latestMwr = portfolioMwr[i];
+                                break;
+                            }
+                        }
+
+                        if (latestTwr !== null && latestMwr !== null) {
+                            const gap = latestMwr - latestTwr;
+                            const titleEl = document.getElementById('twrMwrChartTitle');
+                            const feedbackEl = document.getElementById('twrMwrFeedback');
+                            
+                            if (titleEl) {
+                                titleEl.innerText = `전체 포트폴리오 TWR vs MWR 추이 (행동 알파: ${gap >= 0 ? '+' : ''}${gap.toFixed(2)}%)`;
+                            }
+                            
+                            if (feedbackEl) {
+                                feedbackEl.style.display = 'block';
+                                if (gap >= 0) {
+                                    feedbackEl.style.background = 'rgba(46, 160, 67, 0.15)';
+                                    feedbackEl.style.border = '1px solid rgba(46, 160, 67, 0.4)';
+                                    feedbackEl.style.color = '#3fb950';
+                                    feedbackEl.innerHTML = `✨ <strong>긍정적 타이밍 알파 (+${gap.toFixed(2)}%p) 발생 중!</strong><br>실제 투자 수익률(MWR: ${latestMwr.toFixed(2)}%)이 단순 포트폴리오 수익률(TWR: ${latestTwr.toFixed(2)}%)보다 높습니다. <br>시장 하락기나 조정기에 적극적이고 효과적인 적립 분할 매수(Buy the Dip)를 실천하여 투자 효율을 획기적으로 향상시켰음을 의미합니다. 아주 훌륭한 투자 행동 패턴입니다!`;
+                                } else {
+                                    feedbackEl.style.background = 'rgba(248, 81, 73, 0.15)';
+                                    feedbackEl.style.border = '1px solid rgba(248, 81, 73, 0.4)';
+                                    feedbackEl.style.color = '#f85149';
+                                    feedbackEl.innerHTML = `⚠️ <strong>행동 갭 (${gap.toFixed(2)}%p) 발생 중!</strong><br>실제 투자 수익률(MWR: ${latestMwr.toFixed(2)}%)이 단순 포트폴리오 수익률(TWR: ${latestTwr.toFixed(2)}%)보다 낮습니다. <br>주로 주가가 고점일 때 대규모 자금이 입금되어 매수되었거나, 저점일 때 매수가 더디게 일어난 경우 발생합니다. 향후 시장 조정기(하락기)에 추가 적립금을 분할하여 더 기계적으로 투입하면 타이밍 알파를 양수로 전환할 수 있습니다.`;
+                                }
+                            }
+                        }
+                    }
                 });
         }
 
@@ -1339,6 +1446,8 @@
         // premium Tab Navigation & Smart Budget Dashboard Logic
         // ==========================================================================
         let activeTab = 'stock';
+        let isStockLoaded = false;
+        let isBudgetLoaded = false;
 
         function switchTab(tabName) {
             activeTab = tabName;
@@ -1351,14 +1460,18 @@
             if (tabName === 'stock') {
                 document.getElementById('btn-stock-tab').classList.add('active');
                 document.getElementById('tab-stock').classList.add('active');
+                
+                if (!isStockLoaded) {
+                    refreshAllData();
+                }
             } else if (tabName === 'budget') {
                 document.getElementById('btn-budget-tab').classList.add('active');
                 document.getElementById('tab-budget').classList.add('active');
                 
-                // Load budget data if not loaded or force reload on switch
-                const monthSelect = document.getElementById('budget-month-select');
-                const selectedMonth = monthSelect ? monthSelect.value : null;
-                loadBudgetData(selectedMonth);
+                // Load budget data if not loaded yet
+                if (!isBudgetLoaded) {
+                    refreshAllData();
+                }
             }
         }
 
@@ -1805,27 +1918,45 @@
                 });
         }
 
-        // 전체 데이터 리프레시 통합 (주식 & 가계부 동시 동기화)
-        function refreshAllData() {
-            showAllSkeletons();
-            showBudgetSkeletons();
+        // 전체 데이터 리프레시 통합 (현재 활성화된 탭 기준 순차 동기화)
+        async function refreshAllData() {
+            document.getElementById('data-status').innerText = '데이터 동기화 중...';
             
-            const monthSelect = document.getElementById('budget-month-select');
-            const selectedMonth = monthSelect ? monthSelect.value : null;
+            if (activeTab === 'stock') {
+                showAllSkeletons();
+                try {
+                    // 모바일 통신 병목 및 타임아웃 방지를 위해 순차적(Sequential) 로딩 적용
+                    // 가장 중요한 핵심 요약 지표 우선 로드
+                    await loadOverviewData().catch(err => console.error('Overview load fail:', err));
+                    
+                    // 이후 차트 데이터 순차 로드 (Vercel 및 Google Sheets 동시 연결 부하 대폭 감소)
+                    await loadAllocationData().catch(err => console.error('Allocation load fail:', err));
+                    await loadTwrData().catch(err => console.error('TWR load fail:', err));
+                    await loadMonthlyAssetsData().catch(err => console.error('Monthly load fail:', err));
+                    await loadHoldingsList().catch(err => console.error('Holdings load fail:', err));
+                    
+                    isStockLoaded = true;
+                } catch(err) {
+                    console.error('Stock tab refresh error:', err);
+                }
+            } else if (activeTab === 'budget') {
+                showBudgetSkeletons();
+                const monthSelect = document.getElementById('budget-month-select');
+                const selectedMonth = monthSelect ? monthSelect.value : null;
+                
+                try {
+                    await loadBudgetData(selectedMonth).catch(err => console.error('Budget load fail:', err));
+                    isBudgetLoaded = true;
+                } catch(err) {
+                    console.error('Budget tab refresh error:', err);
+                }
+            }
             
-            Promise.all([
-                loadOverviewData().catch(err => { console.error('Overview load fail:', err); return null; }),
-                loadAllocationData().catch(err => { console.error('Allocation load fail:', err); return null; }),
-                loadTwrData().catch(err => { console.error('TWR load fail:', err); return null; }),
-                loadMonthlyAssetsData().catch(err => { console.error('Monthly load fail:', err); return null; }),
-                loadHoldingsList().catch(err => { console.error('Holdings load fail:', err); return null; }),
-                loadBudgetData(selectedMonth).catch(err => { console.error('Budget load fail:', err); return null; })
-            ])
-            .then(() => {
-                const now = new Date();
-                document.getElementById('data-status').innerText = '최근 동기화: ' + now.toLocaleTimeString();
-            });
+            const now = new Date();
+            document.getElementById('data-status').innerText = '최근 동기화: ' + now.toLocaleTimeString();
         }
+        
+        // 페이지 진입 시 최초 1회 실행
         window.addEventListener('DOMContentLoaded', refreshAllData);
     </script>
 </body>
