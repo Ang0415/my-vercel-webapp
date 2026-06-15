@@ -354,9 +354,9 @@
                         </div>
                     </div>
 
-                    <!-- 2. 지출 TOP 8 소분류 비중 -->
+                    <!-- 2. 소분류별 소비 비중 (이번 달 TOP 8) -->
                     <div class="section-card">
-                        <div class="section-title">🍩 이번 달 지출 TOP 8 소분류 비중</div>
+                        <div class="section-title">🍩 소분류별 소비 비중 (이번 달 TOP 8)</div>
                         <div class="chart-container">
                             <canvas id="budgetTopSubcatChart"></canvas>
                         </div>
@@ -1661,7 +1661,7 @@
                         plugins: [donutLabelsPlugin]
                     });
  
-                    // 7-2. 이번 달 지출 TOP 8 소분류 비중 (도넛 차트)
+                    // 7-2. 소분류별 소비 비중 (이번 달 TOP 8) (도넛 차트)
                     if (charts.budgetTopSubcat) charts.budgetTopSubcat.destroy();
                     const subcatCtx = document.getElementById('budgetTopSubcatChart').getContext('2d');
                     charts.budgetTopSubcat = new Chart(subcatCtx, {

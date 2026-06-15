@@ -361,9 +361,9 @@
                         </div>
                     </div>
 
-                    <!-- 2. 지출 TOP 8 소분류 비중 -->
+                    <!-- 2. 소분류별 소비 비중 (이번 달 TOP 8) -->
                     <div class="section-card">
-                        <div class="section-title">🍩 이번 달 지출 TOP 8 소분류 비중</div>
+                        <div class="section-title">🍩 소분류별 소비 비중 (이번 달 TOP 8)</div>
                         <div class="chart-container">
                             <canvas id="budgetTopSubcatChart"></canvas>
                         </div>
@@ -1446,6 +1446,8 @@
         // premium Tab Navigation & Smart Budget Dashboard Logic
         // ==========================================================================
         let activeTab = 'stock';
+        let isStockLoaded = false;
+        let isBudgetLoaded = false;
 
         function switchTab(tabName) {
             activeTab = tabName;
@@ -1458,14 +1460,18 @@
             if (tabName === 'stock') {
                 document.getElementById('btn-stock-tab').classList.add('active');
                 document.getElementById('tab-stock').classList.add('active');
+                
+                if (!isStockLoaded) {
+                    refreshAllData();
+                }
             } else if (tabName === 'budget') {
                 document.getElementById('btn-budget-tab').classList.add('active');
                 document.getElementById('tab-budget').classList.add('active');
                 
-                // Load budget data if not loaded or force reload on switch
-                const monthSelect = document.getElementById('budget-month-select');
-                const selectedMonth = monthSelect ? monthSelect.value : null;
-                loadBudgetData(selectedMonth);
+                // Load budget data if not loaded yet
+                if (!isBudgetLoaded) {
+                    refreshAllData();
+                }
             }
         }
 
@@ -1768,7 +1774,7 @@
                         plugins: [donutLabelsPlugin]
                     });
  
-                    // 7-2. 이번 달 지출 TOP 8 소분류 비중 (도넛 차트)
+                    // 7-2. 소분류별 소비 비중 (이번 달 TOP 8) (도넛 차트)
                     if (charts.budgetTopSubcat) charts.budgetTopSubcat.destroy();
                     const subcatCtx = document.getElementById('budgetTopSubcatChart').getContext('2d');
                     charts.budgetTopSubcat = new Chart(subcatCtx, {
@@ -1912,27 +1918,45 @@
                 });
         }
 
-        // 전체 데이터 리프레시 통합 (주식 & 가계부 동시 동기화)
-        function refreshAllData() {
-            showAllSkeletons();
-            showBudgetSkeletons();
+        // 전체 데이터 리프레시 통합 (현재 활성화된 탭 기준 순차 동기화)
+        async function refreshAllData() {
+            document.getElementById('data-status').innerText = '데이터 동기화 중...';
             
-            const monthSelect = document.getElementById('budget-month-select');
-            const selectedMonth = monthSelect ? monthSelect.value : null;
+            if (activeTab === 'stock') {
+                showAllSkeletons();
+                try {
+                    // 모바일 통신 병목 및 타임아웃 방지를 위해 순차적(Sequential) 로딩 적용
+                    // 가장 중요한 핵심 요약 지표 우선 로드
+                    await loadOverviewData().catch(err => console.error('Overview load fail:', err));
+                    
+                    // 이후 차트 데이터 순차 로드 (Vercel 및 Google Sheets 동시 연결 부하 대폭 감소)
+                    await loadAllocationData().catch(err => console.error('Allocation load fail:', err));
+                    await loadTwrData().catch(err => console.error('TWR load fail:', err));
+                    await loadMonthlyAssetsData().catch(err => console.error('Monthly load fail:', err));
+                    await loadHoldingsList().catch(err => console.error('Holdings load fail:', err));
+                    
+                    isStockLoaded = true;
+                } catch(err) {
+                    console.error('Stock tab refresh error:', err);
+                }
+            } else if (activeTab === 'budget') {
+                showBudgetSkeletons();
+                const monthSelect = document.getElementById('budget-month-select');
+                const selectedMonth = monthSelect ? monthSelect.value : null;
+                
+                try {
+                    await loadBudgetData(selectedMonth).catch(err => console.error('Budget load fail:', err));
+                    isBudgetLoaded = true;
+                } catch(err) {
+                    console.error('Budget tab refresh error:', err);
+                }
+            }
             
-            Promise.all([
-                loadOverviewData().catch(err => { console.error('Overview load fail:', err); return null; }),
-                loadAllocationData().catch(err => { console.error('Allocation load fail:', err); return null; }),
-                loadTwrData().catch(err => { console.error('TWR load fail:', err); return null; }),
-                loadMonthlyAssetsData().catch(err => { console.error('Monthly load fail:', err); return null; }),
-                loadHoldingsList().catch(err => { console.error('Holdings load fail:', err); return null; }),
-                loadBudgetData(selectedMonth).catch(err => { console.error('Budget load fail:', err); return null; })
-            ])
-            .then(() => {
-                const now = new Date();
-                document.getElementById('data-status').innerText = '최근 동기화: ' + now.toLocaleTimeString();
-            });
+            const now = new Date();
+            document.getElementById('data-status').innerText = '최근 동기화: ' + now.toLocaleTimeString();
         }
+        
+        // 페이지 진입 시 최초 1회 실행
         window.addEventListener('DOMContentLoaded', refreshAllData);
     </script>
 </body>

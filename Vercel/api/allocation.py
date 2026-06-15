@@ -91,7 +91,7 @@ class handler(BaseHTTPRequestHandler):
                         if asset_name and asset_name != '합계':
                             if asset_note == '카드':
                                 total_card_outstanding += abs(curr_balance)
-                            elif asset_note != '정소현':
+                            elif asset_name == 'NH농협' and asset_note != '정소현':
                                 total_cash_accounts += curr_balance
                                 
                 net_cash_balance = total_cash_accounts - total_card_outstanding

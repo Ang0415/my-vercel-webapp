@@ -302,7 +302,7 @@ class handler(BaseHTTPRequestHandler):
                     if asset_name and asset_name != '합계':
                         if asset_note == '카드':
                             total_card_outstanding += abs(curr_balance) # 카드 잔액은 보통 음수로 기록됨
-                        elif asset_note != '정소현': # 정소현 관련 카드는 자산에서 제외 (사용자 설정 시트 기준)
+                        elif asset_name == 'NH농협' and asset_note != '정소현': # 정소현 관련 카드는 자산에서 제외 (사용자 설정 시트 기준)
                             total_cash_accounts += curr_balance
                             
             net_cash_balance = total_cash_accounts - total_card_outstanding
@@ -355,11 +355,17 @@ class handler(BaseHTTPRequestHandler):
                         norm_desc = re.sub(r'\[.*?\]', '', norm_desc)
                         norm_desc = re.sub(r'-\d+', '', norm_desc)
                         norm_desc = re.sub(r'\d+건', '', norm_desc)
+                        norm_desc = re.sub(r'\d+월', '', norm_desc)
                         norm_desc = re.sub(r'\s+', '', norm_desc).strip()
+                        
+                        # 사용자 맞춤형 예외 정규화 (정소현 보험 항목 불일치 방지 및 소분류 교정)
+                        if '정소현' in desc and '보험' in desc:
+                            sub_cat = '보험'
+                            norm_desc = '정소현보험'
                         
                         # 고정비 성격이 있는 주요 소분류는 내용(norm_desc)까지 묶어 상세 매핑
                         # 그 외 일반 지출은 소분류 단위로만 묶어서 정기 유사고정비 판정
-                        if sub_cat in ['대출이자/원금', '보험', '주거비', '통신비', '구독료', '공과금', '콘텐츠']:
+                        if sub_cat in ['대출이자/원금', '보험', '주거비', '통신비', '구독료', '공과금', '콘텐츠', '관리비']:
                             group_key = (main_cat, sub_cat, norm_desc)
                         else:
                             group_key = (main_cat, sub_cat, "")
@@ -395,7 +401,7 @@ class handler(BaseHTTPRequestHandler):
                 min_val = min(monthly_totals)
                 is_stable = (max_val - min_val) <= (avg_active_amount * 0.15) if avg_active_amount > 0 else True
                 
-                is_strict_subcat = sub_cat in ['대출이자/원금', '보험', '주거비', '통신비', '구독료', '콘텐츠']
+                is_strict_subcat = sub_cat in ['대출이자/원금', '보험', '주거비', '통신비', '구독료', '콘텐츠', '관리비', '공과금'] or '관리비' in norm_desc or '관리비' in sub_cat
                 
                 # 표시용 한글 정돈
                 display_name = norm_desc if norm_desc else sub_cat
@@ -407,8 +413,8 @@ class handler(BaseHTTPRequestHandler):
                 elif display_name == '대출이자/원금':
                     display_name = '대출 이자 및 원금'
                     
-                # 6개월 중 최소 4개월 이상 발생 시 정기성 고정비로 판정
-                if months_active >= 4:
+                # 사용자 요청: 6개월 중 최소 3개월 이상 발생 시 정기성 고정비로 판정 (잡다한 내역 방지)
+                if months_active >= 3:
                     if is_strict_subcat or is_stable:
                         strict_fixed_items.append({
                             "name": display_name,
