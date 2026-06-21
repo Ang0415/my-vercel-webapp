@@ -92,15 +92,24 @@ def safe_get_all_records(ws):
         records.append(record)
     return records
 
+def safe_open_sheet(gc, name, retries=3):
+    for i in range(retries):
+        try:
+            return gc.open(name)
+        except Exception as e:
+            if i == retries - 1:
+                raise e
+            time.sleep(1.5)
+
 def calculate_mwr_history(gc):
     try:
         # Load Total Valuation
-        sh_asset = gc.open('성과_자산추이_Raw')
+        sh_asset = safe_open_sheet(gc, '성과_자산추이_Raw')
         ws_asset = sh_asset.worksheet('Total')
         records_asset = safe_get_all_records(ws_asset)
         
         # Load Total Profit
-        sh_profit = gc.open('성과_손익_Raw')
+        sh_profit = safe_open_sheet(gc, '성과_손익_Raw')
         ws_profit = sh_profit.worksheet('Total')
         records_profit = safe_get_all_records(ws_profit)
         
@@ -148,7 +157,7 @@ def calculate_mwr_history(gc):
         return mwr_history
     except Exception as e:
         print(f"Error calculating MWR: {e}")
-        return []
+        return [{"Date": "1970-01-01", "MWR": 0.0, "Error": str(e)}]
 
 class handler(BaseHTTPRequestHandler):
     def do_GET(self):
